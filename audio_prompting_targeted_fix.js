@@ -21,6 +21,8 @@
     const OVERLAY_TITLE = 'Veo Prompt Artisan';
     const OVERLAY_ID = 'vfx-artisan-overlay';
     const TOGGLE_BUTTON_ID = 'vfx-artisan-toggle-btn';
+    const PROMPT_HISTORY_KEY = 'vfx-artisan-prompt-history';
+    const MAX_PROMPT_HISTORY = 20; // Max number of prompts to store in history
 
     // Enhanced UI state with better defaults and cleanup tracking
     const DEFAULT_WINDOW_STATE = {
@@ -91,62 +93,29 @@
         if (existingNotification) {
             existingNotification.remove();
         }
-        
-        const colors = {
-            info: '#7C3AED',
-            success: '#10B981',
-            warning: '#F59E0B',
-            error: '#EF4444'
-        };
-        
+
         // Create new notification
         const notification = document.createElement('div');
         notification.id = 'vfx-temp-notification';
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: ${colors[type] || colors.info};
-            color: white;
-            padding: 12px 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            z-index: 10001;
-            font-family: 'Google Sans', sans-serif;
-            font-size: 14px;
-            font-weight: 500;
-            max-width: 300px;
-            animation: slideInRight 0.3s ease-out;
-        `;
+        // Apply base class and type-specific class
+        notification.className = `vfx-notification vfx-notification-${type} vfx-animate-slide-in-right`;
         notification.textContent = message;
-        
-        // Add animation styles if not already present
-        if (!document.getElementById('vfx-notification-styles')) {
-            const style = document.createElement('style');
-            style.id = 'vfx-notification-styles';
-            style.textContent = `
-                @keyframes slideInRight {
-                    from { transform: translateX(100%); opacity: 0; }
-                    to { transform: translateX(0); opacity: 1; }
-                }
-                @keyframes slideOutRight {
-                    from { transform: translateX(0); opacity: 1; }
-                    to { transform: translateX(100%); opacity: 0; }
-                }
-            `;
-            document.head.appendChild(style);
-        }
+
+        // Animations are now part of the main CSS in GM_addStyle with vfx-animate-* classes
+        // No need to inject style element here if animations are globally defined.
         
         document.body.appendChild(notification);
         
         // Auto-remove after 3 seconds
         setTimeout(() => {
-            notification.style.animation = 'slideOutRight 0.3s ease-out';
+            // notification.style.animation = 'slideOutRight 0.3s ease-out'; // Old way
+            notification.classList.remove('vfx-animate-slide-in-right');
+            notification.classList.add('vfx-animate-slide-out-right');
             setTimeout(() => {
                 if (notification.parentNode) {
                     notification.remove();
                 }
-            }, 300);
+            }, 300); // Matches animation duration
         }, 3000);
     }
     
@@ -263,6 +232,14 @@
     const VEO_DURATION_HINTS = ["", "Very short clip (1-3 seconds)", "Short clip (3-5 seconds)", "Medium clip (5-10 seconds)", "Longer scene (10-15 seconds)", "Looping GIF style", "Dynamic quick cuts", "Slow burn reveal"];
     const VEO_PROMPT_COUNT_OPTIONS_DISPLAY = ["1 Prompt", "3 Prompts", "5 Prompts"];
     const VEO_PROMPT_COUNT_OPTIONS_VALUES = [1, 3, 5];
+
+    const PREDEFINED_THEMES = [
+        "Cosmic Horror", "Solarpunk Utopia", "Steampunk Detectives", "Ancient Lost Civilizations",
+        "Cybernetic Animals", "Magical Libraries", "Underwater Kingdoms", "Time Travel Paradox",
+        "Miniature World", "Dream Landscapes", "Post-Apocalyptic Survival", "Mythical Creatures Reunion",
+        "Haunted Space Station", "Neon Noir City", "Wild West Alchemy", "Bio-Luminescent Forest",
+        "Desert Oasis Mirage", "Floating Sky Islands", "Arctic Expedition Mysteries", "Volcanic Forge Worlds"
+    ];
 
     const MAX_IMAGE_SIZE_MB = 5;
     const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
@@ -794,11 +771,11 @@ Do not include any other text, greetings, or explanations outside of this JSON s
             audioOff: () => `AI assistant, "Veo 2 Prompt Artisan & Scene Annotator", imaginative. Generate RANDOM, UNEXPECTED, WILDLY CREATIVE video concepts with strong visual potential for Veo 2 annotations. Avoid tropes unless novel. Maximize diversity. Surprise user. Concepts should be "annotatable". Mashup genres, give mundane objects extraordinary abilities, bizarre predicaments. Spark imagination for detailed visual scene. Examples:
 - 'Melancholic sloth, speed chess champion, velvet smoking jacket, on melting iceberg, aurora borealis.'
 - 'Sentient argyle sock puppet detective, mismatched button eyes, examines giant lint ball, noir miniature city of laundry items.'
-Output ONLY a single, valid JSON object with the following structure: {"concept": "string (MAX 20-30 words, visual nouns/actions)", "suggestedStyle": "string from list", "suggestedCameraAngle"?: "string", "suggestedCameraMovement"?: "string", "suggestedLighting"?: "string"}. Do NOT output a JSON array. "suggestedStyle" MUST be from [${VEO_STYLES_STRING_FOR_LLM}]. Concept most unique. Style/camera enhance "annotatability".`,
-            audioOn: () => `AI assistant, "Veo 2 Prompt Artisan & Scene Annotator", imaginative. Generate RANDOM, UNEXPECTED, WILDLY CREATIVE video concepts with strong visual potential for Veo 2 annotations. Avoid tropes unless novel. Maximize diversity. Surprise user. Concepts should be "annotatable". Mashup genres, give mundane objects extraordinary abilities, bizarre predicaments. Spark imagination for detailed visual scene. Examples:
+Output ONLY a valid JSON array, where each object in the array has the following structure: {"concept": "string (MAX 20-30 words, visual nouns/actions)", "suggestedStyle": "string from list", "suggestedCameraAngle"?: "string", "suggestedCameraMovement"?: "string", "suggestedLighting"?: "string"}. Do NOT output a single JSON object. Generate a list of 3 distinct concepts. "suggestedStyle" MUST be from [${VEO_STYLES_STRING_FOR_LLM}]. Concept most unique. Style/camera enhance "annotatability". If a category is provided by the user and is not 'Any', all concepts should primarily belong to or be strongly inspired by this category.`,
+            audioOn: (category) => `AI assistant, "Veo 2 Prompt Artisan & Scene Annotator", imaginative. Generate a list of 3 distinct, RANDOM, UNEXPECTED, WILDLY CREATIVE video concepts with strong visual potential for Veo 2 annotations. Avoid tropes unless novel. Maximize diversity. Surprise user. Concepts should be "annotatable". Mashup genres, give mundane objects extraordinary abilities, bizarre predicaments. Spark imagination for detailed visual scene. Examples:
 - 'Melancholic sloth, speed chess champion, velvet smoking jacket, on melting iceberg, aurora borealis. Audio: Gentle lapping of water, sloth's thoughtful sigh, faint classical music.'
 - 'Sentient argyle sock puppet detective, mismatched button eyes, examines giant lint ball, noir miniature city of laundry items. Audio: Tiny squeaky footsteps, dramatic jazz sting, detective's muffled internal monologue.'
-Output ONLY a single, valid JSON object with the following structure: {"concept": "string (MAX 20-30 words, visual nouns/actions)", "suggestedStyle": "string from list", "suggestedCameraAngle"?: "string", "suggestedCameraMovement"?: "string", "suggestedLighting"?: "string", "suggestedAudio"?: ["string", "string"]}. Do NOT output a JSON array. "suggestedStyle" MUST be from [${VEO_STYLES_STRING_FOR_LLM}]. Concept most unique. Style/camera enhance "annotatability". If suggesting audio, provide 1-2 brief ideas for sound effects, music mood, or even a short dialogue hint (e.g., "Audio: Whispers, wind howling").`
+Output ONLY a valid JSON array, where each object in the array has the following structure: {"concept": "string (MAX 20-30 words, visual nouns/actions)", "suggestedStyle": "string from list", "suggestedCameraAngle"?: "string", "suggestedCameraMovement"?: "string", "suggestedLighting"?: "string", "suggestedAudio"?: ["string", "string"]}. Do NOT output a single JSON object. Generate a list of 3 distinct concepts. "suggestedStyle" MUST be from [${VEO_STYLES_STRING_FOR_LLM}]. Concept most unique. Style/camera enhance "annotatability". If suggesting audio, provide 1-2 brief ideas for sound effects, music mood, or even a short dialogue hint (e.g., "Audio: Whispers, wind howling"). If a category is provided by the user and is not 'Any', all concepts should primarily belong to or be strongly inspired by this category: '${category || 'Any'}'.`
         }
     };
 
@@ -817,8 +794,50 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         activeMode: "generator",
         uploadedImage: null,
         activeModal: null, // { type: 'critique', data: {...}, isLoading: false, error: null, result: null }
+        promptHistory: [], // Added for prompt history
     };
     // --- END: Global State Variables ---
+
+    // --- START: Prompt History Management Functions ---
+    function loadPromptHistory() {
+        safeExecute(() => {
+            const savedHistory = localStorage.getItem(PROMPT_HISTORY_KEY);
+            if (savedHistory) {
+                try {
+                    state.promptHistory = JSON.parse(savedHistory);
+                } catch (e) {
+                    console.error("Error parsing prompt history from localStorage:", e);
+                    state.promptHistory = []; // Reset if parsing fails
+                }
+            }
+        }, "Load Prompt History");
+    }
+
+    function savePromptHistory() {
+        safeExecute(() => {
+            localStorage.setItem(PROMPT_HISTORY_KEY, JSON.stringify(state.promptHistory));
+        }, "Save Prompt History");
+    }
+
+    function addPromptToHistory(promptText) {
+        if (!promptText || !promptText.trim()) return;
+        const trimmedPrompt = promptText.trim();
+
+        safeExecute(() => {
+            // Remove existing identical prompt to move it to the top
+            state.promptHistory = state.promptHistory.filter(p => p !== trimmedPrompt);
+
+            // Add to the beginning
+            state.promptHistory.unshift(trimmedPrompt);
+
+            // Enforce max history size
+            if (state.promptHistory.length > MAX_PROMPT_HISTORY) {
+                state.promptHistory = state.promptHistory.slice(0, MAX_PROMPT_HISTORY);
+            }
+            savePromptHistory();
+        }, "Add to Prompt History");
+    }
+    // --- END: Prompt History Management Functions ---
 
     // --- START: DOM Element References ---
     let overlayContainer, mainTextarea, imagePreviewContainer, fileInputRef;
@@ -1155,8 +1174,13 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         mainTextarea.disabled = state.isLoading;
         generateButton.disabled = state.isLoading || ((!state.promptParams.description || !state.promptParams.description.trim()) && !state.uploadedImage);
         generateButton.innerHTML = state.isLoading && (!state.activeModal || !state.activeModal.isLoading) ?
-            createIconSpanHTML("Loader", "default", "h-6 w-6 text-white") :
-            `<span class="hidden sm:inline">${state.activeMode === 'sceneExtender' ? "Extend Scene" : "Generate"}</span> ${createIconSpanHTML("arrow_forward_ios", "filled", "w-6 h-6 sm:ml-2")}`;
+            createIconSpanHTML("Loader", "default", "vfx-icon-medium vfx-animate-spin") : // Use vfx-icon and animation
+            `<span class="vfx-button-text">${state.activeMode === 'sceneExtender' ? "Extend Scene" : "Generate"}</span> ${createIconSpanHTML("arrow_forward_ios", "filled", "vfx-icon-medium")}`; // Use vfx-icon
+
+        // Add vfx-button-icon-right to generateButton if the icon is meant to be on the right of text
+        // This depends on the visual design, assuming text then icon.
+        // If generateButton only contains an icon when loading, it might need dynamic class changes or different handling.
+        // For now, ensuring icons themselves use vfx classes. The button base class is "vfx-button vfx-button-primary vfx-button-large vfx-generate-button"
 
         if (clearPromptButton) { // Ensure it exists
             clearPromptButton.style.display = (state.promptParams.description && state.promptParams.description.trim() && !state.isLoading) ? 'block' : 'none';
@@ -1167,14 +1191,14 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
 
         if (state.uploadedImage) {
             imagePreviewContainer.innerHTML = `
-                <div class="flex items-center p-2 studio-bg-elevated rounded-md border studio-border-soft animate-fadeIn">
-                    <img src="${state.uploadedImage.previewUrl}" alt="Uploaded preview" class="w-12 h-12 object-cover rounded mr-3"/>
-                    <div class="flex-grow text-sm">
-                        <p class="vpa-text-main font-medium truncate">${sanitizeHTML(state.uploadedImage.name)}</p>
-                        <p class="vpa-text-faint">${MAX_IMAGE_SIZE_MB}MB Max</p>
+                <div class="vfx-image-preview-item vfx-animate-fade-in">
+                    <img src="${state.uploadedImage.previewUrl}" alt="Uploaded preview" class="vfx-image-preview-thumbnail"/>
+                    <div class="vfx-image-preview-info">
+                        <p class="vfx-text-main vfx-text-medium vfx-text-truncate">${sanitizeHTML(state.uploadedImage.name)}</p>
+                        <p class="vfx-text-faint vfx-text-small">${MAX_IMAGE_SIZE_MB}MB Max</p>
                     </div>
-                    <button id="vfx-clear-image-btn" class="p-1.5 vpa-text-subdued hover:vpa-text-main rounded-full hover:bg-[hsla(0,0%,100%,0.1)] ml-2" aria-label="Clear uploaded image" title="Clear Image" ${state.isLoading ? 'disabled' : ''}>
-                        ${createIconSpanHTML("close", "default", "w-5 h-5")}
+                    <button id="vfx-clear-image-btn" class="vfx-button-icon vfx-button-icon-subtle vfx-image-preview-clear-btn" aria-label="Clear uploaded image" title="Clear Image" ${state.isLoading ? 'disabled' : ''}>
+                        ${createIconSpanHTML("close", "default", "vfx-icon-small")}
                     </button>
                 </div>`;
             const clearImgBtn = imagePreviewContainer.querySelector('#vfx-clear-image-btn');
@@ -1233,7 +1257,8 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             listContainer.innerHTML = '';
             return;
         }
-        listContainer.innerHTML = `<div class="space-y-4">${state.generatedPrompts.map(prompt => renderPromptItem(prompt)).join('')}</div>`;
+        // Use vfx-list or vfx-grid for layout if defined, otherwise simple div with spacing
+        listContainer.innerHTML = `<div class="vfx-prompt-items-layout">${state.generatedPrompts.map(prompt => renderPromptItem(prompt)).join('')}</div>`;
         attachPromptItemEventListeners();
     }
 
@@ -1241,50 +1266,51 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
       const isEditing = state.activeModal?.type === 'editPrompt' && state.activeModal?.data?.promptId === prompt.id;
       const editingText = isEditing ? state.activeModal.data.editingText : prompt.text;
 
+      // Using vfx-button-icon and feature-specific hover classes (e.g., vfx-button-icon-hover-orange)
       const buttonsHTML = isEditing ? `
-          <button data-prompt-id="${prompt.id}" data-action="saveEdit" aria-label="Save changes" title="Save" class="p-2.5 rounded-full vpa-text-main transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-75 bg-green-600 hover:bg-green-500 text-white">
-              ${createIconSpanHTML("check", "symbols-outlined", "w-5 h-5")}
+          <button data-prompt-id="${prompt.id}" data-action="saveEdit" aria-label="Save changes" title="Save" class="vfx-button-icon vfx-button-icon-green">
+              ${createIconSpanHTML("check", "symbols-outlined", "vfx-icon-medium")}
           </button>
-          <button data-prompt-id="${prompt.id}" data-action="cancelEdit" aria-label="Cancel editing" title="Cancel" class="p-2.5 rounded-full vpa-text-main transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-75 bg-red-600 hover:bg-red-500 text-white">
-              ${createIconSpanHTML("cancel", "symbols-outlined", "w-5 h-5")}
+          <button data-prompt-id="${prompt.id}" data-action="cancelEdit" aria-label="Cancel editing" title="Cancel" class="vfx-button-icon vfx-button-icon-red">
+              ${createIconSpanHTML("cancel", "symbols-outlined", "vfx-icon-medium")}
           </button>
       ` : `
-          <button data-prompt-id="${prompt.id}" data-action="suggestSequence" aria-label="Suggest Shot Sequence ✨" title="Suggest Shot Sequence ✨" class="p-2.5 rounded-full vpa-text-subdued hover:vpa-text-main transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-75 bg-transparent hover:bg-orange-600">
-              ${createIconSpanHTML("movie", "symbols-outlined", "w-5 h-5")}
+          <button data-prompt-id="${prompt.id}" data-action="suggestSequence" aria-label="Suggest Shot Sequence ✨" title="Suggest Shot Sequence ✨" class="vfx-button-icon vfx-button-icon-subtle vfx-button-icon-hover-orange">
+              ${createIconSpanHTML("movie", "symbols-outlined", "vfx-icon-medium")}
           </button>
-          <button data-prompt-id="${prompt.id}" data-action="elaboratePrompt" aria-label="Elaborate Prompt ✨" title="Elaborate Prompt ✨" class="p-2.5 rounded-full vpa-text-subdued hover:vpa-text-main transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-75 bg-transparent hover:bg-sky-600">
-              ${createIconSpanHTML("rate_review", "symbols-outlined", "w-5 h-5")}
+          <button data-prompt-id="${prompt.id}" data-action="elaboratePrompt" aria-label="Elaborate Prompt ✨" title="Elaborate Prompt ✨" class="vfx-button-icon vfx-button-icon-subtle vfx-button-icon-hover-sky">
+              ${createIconSpanHTML("rate_review", "symbols-outlined", "vfx-icon-medium")}
           </button>
-          <button data-prompt-id="${prompt.id}" data-action="styleTransfer" aria-label="Transfer Style ✨" title="Transfer Style ✨" class="p-2.5 rounded-full vpa-text-subdued hover:vpa-text-main transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-75 bg-transparent hover:bg-pink-600">
-              ${createIconSpanHTML("palette", "symbols-outlined", "w-5 h-5")}
+          <button data-prompt-id="${prompt.id}" data-action="styleTransfer" aria-label="Transfer Style ✨" title="Transfer Style ✨" class="vfx-button-icon vfx-button-icon-subtle vfx-button-icon-hover-pink">
+              ${createIconSpanHTML("palette", "symbols-outlined", "vfx-icon-medium")}
           </button>
-          <button data-prompt-id="${prompt.id}" data-action="visualizePrompt" aria-label="Visualize Prompt ✨" title="Visualize Prompt ✨ (UI Only)" class="p-2.5 rounded-full vpa-text-subdued hover:vpa-text-main transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-75 bg-transparent hover:bg-lime-600">
-              ${createIconSpanHTML("image", "symbols-outlined", "w-5 h-5")}
+          <button data-prompt-id="${prompt.id}" data-action="visualizePrompt" aria-label="Visualize Prompt ✨" title="Visualize Prompt ✨ (UI Only)" class="vfx-button-icon vfx-button-icon-subtle vfx-button-icon-hover-lime">
+              ${createIconSpanHTML("image", "symbols-outlined", "vfx-icon-medium")}
           </button>
-          <button data-prompt-id="${prompt.id}" data-action="critiquePrompt" aria-label="Critique & Enhance Prompt ✨" title="Critique & Enhance Prompt ✨" class="p-2.5 rounded-full vpa-text-subdued hover:vpa-text-main transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-75 bg-transparent hover:bg-teal-600">
-              ${createIconSpanHTML("auto_awesome", "symbols-outlined", "w-5 h-5")}
+          <button data-prompt-id="${prompt.id}" data-action="critiquePrompt" aria-label="Critique & Enhance Prompt ✨" title="Critique & Enhance Prompt ✨" class="vfx-button-icon vfx-button-icon-subtle vfx-button-icon-hover-teal">
+              ${createIconSpanHTML("auto_awesome", "symbols-outlined", "vfx-icon-medium")}
           </button>
-          <button data-prompt-id="${prompt.id}" data-action="useAsBase" aria-label="Use as Base" title="Use as Base" class="p-2.5 rounded-full vpa-text-subdued hover:vpa-text-main transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-75 bg-transparent hover:bg-blue-600">
-              ${createIconSpanHTML("flare", "symbols-outlined", "w-5 h-5")}
+          <button data-prompt-id="${prompt.id}" data-action="useAsBase" aria-label="Use as Base" title="Use as Base" class="vfx-button-icon vfx-button-icon-subtle vfx-button-icon-hover-blue">
+              ${createIconSpanHTML("flare", "symbols-outlined", "vfx-icon-medium")}
           </button>
-          <button data-prompt-id="${prompt.id}" data-action="editPrompt" aria-label="Edit prompt" title="Edit Prompt" class="p-2.5 rounded-full vpa-text-subdued hover:vpa-text-main transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-75 studio-icon-button">
-              ${createIconSpanHTML("edit", "symbols-outlined", "w-5 h-5")}
+          <button data-prompt-id="${prompt.id}" data-action="editPrompt" aria-label="Edit prompt" title="Edit Prompt" class="vfx-button-icon vfx-button-icon-subtle">
+              ${createIconSpanHTML("edit", "symbols-outlined", "vfx-icon-medium")}
           </button>
-          <button data-prompt-id="${prompt.id}" data-action="copyPrompt" aria-label="Copy prompt" title="Copy Prompt" class="p-2.5 rounded-full vpa-text-subdued hover:vpa-text-main transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-75 studio-icon-button">
-              ${createIconSpanHTML("content_copy", "symbols-outlined", "w-5 h-5")}
+          <button data-prompt-id="${prompt.id}" data-action="copyPrompt" aria-label="Copy prompt" title="Copy Prompt" class="vfx-button-icon vfx-button-icon-subtle">
+              ${createIconSpanHTML("content_copy", "symbols-outlined", "vfx-icon-medium")}
           </button>
       `;
 
       return `
-          <div class="studio-bg-elevated p-4 rounded-xl shadow-lg flex flex-col border studio-border-strong" id="prompt-item-${prompt.id}">
+          <div class="vfx-card vfx-prompt-item" id="prompt-item-${prompt.id}">
               ${isEditing ? `
-                  <div class="flex-grow mb-3">
-                      <textarea data-prompt-id="${prompt.id}" class="prompt-edit-area w-full studio-input-base bg-gray-800 border-gray-700 vpa-text-main rounded-md shadow-sm focus:ring-1 focus:ring-purple-500 focus:border-purple-500 p-2.5 text-sm resize-y custom-scrollbar" aria-label="Edit prompt text" rows="${Math.max(3, Math.min(10, (editingText || "").split('\n').length + Math.floor((editingText || "").length / 60)))}">${sanitizeHTML(editingText)}</textarea>
+                  <div class="vfx-prompt-item-edit-area">
+                      <textarea data-prompt-id="${prompt.id}" class="vfx-textarea vfx-prompt-edit-textarea" aria-label="Edit prompt text" rows="${Math.max(3, Math.min(10, (editingText || "").split('\n').length + Math.floor((editingText || "").length / 60)))}">${sanitizeHTML(editingText)}</textarea>
                   </div>
               ` : `
-                  <p class="vpa-text-main text-sm flex-grow mb-4 break-words whitespace-pre-wrap leading-relaxed">${sanitizeHTML(prompt.text)}</p>
+                  <p class="vfx-text-main vfx-prompt-item-text">${sanitizeHTML(prompt.text)}</p>
               `}
-              <div class="flex flex-wrap items-center justify-end space-x-1 sm:space-x-2 mt-auto">
+              <div class="vfx-prompt-item-actions">
                   ${buttonsHTML}
               </div>
           </div>
@@ -1346,8 +1372,8 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             return;
         }
 
-        generalModalContainer.style.display = 'flex';
-        let modalContentHTML = '';
+        generalModalContainer.style.display = 'flex'; // This is for the backdrop
+        // modalContentHTML is not used here.
         const { type, data, isLoading, error, result } = state.activeModal;
 
         let title = "";
@@ -1361,38 +1387,43 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             case 'styleTransfer': title = "Transfer Style ✨"; break;
             case 'storyboard': title = "Prompt to Storyboard ✨"; break;
             case 'visualize': title = "Visualize Prompt ✨ (UI Only)"; break;
+            case 'surpriseMeResults': title = "Choose a Concept"; break;
+            case 'promptHistory': title = "Prompt History"; break;
             default: title = "Modal";
         }
 
         let bodyHTML = '';
         if (isLoading) {
-            bodyHTML = `<div class="flex flex-col items-center justify-center space-y-3 my-10" aria-live="polite" aria-busy="true">
-                            ${createIconSpanHTML("Loader", "default", "h-10 w-10 text-purple-500")}
-                            <p class="vpa-text-subdued text-sm">${sanitizeHTML(state.currentApiActionMessage || "Loading...")}</p>
+            bodyHTML = `<div class="vfx-loading-spinner-container">
+                            ${createIconSpanHTML("Loader", "default", "vfx-icon-large vfx-icon-accent vfx-animate-spin")}
+                            <p class="vfx-text-subdued vfx-loading-message">${sanitizeHTML(state.currentApiActionMessage || "Loading...")}</p>
                         </div>`;
         } else if (error) {
-            bodyHTML = `<div class="p-3 bg-red-700 bg-opacity-20 text-red-200 rounded-md"><p class="font-medium">Error:</p><p class="text-sm">${sanitizeHTML(error)}</p></div>`;
+            bodyHTML = `<div class="vfx-alert vfx-alert-error"><p class="vfx-alert-title">Error:</p><p class="vfx-alert-message">${sanitizeHTML(error)}</p></div>`;
         } else {
             bodyHTML = getModalBodyHTML(type, data, result);
         }
 
+        // Size classes for the modal content itself, not the backdrop
         const sizeClasses = {
-            advancedSettings: 'max-w-4xl', critique: 'max-w-2xl', themeExplorer: 'max-w-2xl',
-            elaborate: 'max-w-2xl', sequence: 'max-w-2xl', characterGen: 'max-w-2xl',
-            styleTransfer: 'max-w-2xl', storyboard: 'max-w-4xl', visualize: 'max-w-2xl'
+            advancedSettings: 'vfx-modal-large', critique: 'vfx-modal-medium', themeExplorer: 'vfx-modal-medium',
+            elaborate: 'vfx-modal-medium', sequence: 'vfx-modal-medium', characterGen: 'vfx-modal-medium',
+            styleTransfer: 'vfx-modal-medium', storyboard: 'vfx-modal-large', visualize: 'vfx-modal-medium',
+            surpriseMeResults: 'vfx-modal-large',
+            promptHistory: 'vfx-modal-large' // Or medium
         };
-        const currentSizeClass = sizeClasses[type] || 'max-w-lg';
+        const currentSizeClass = sizeClasses[type] || 'vfx-modal-small';
 
-
+        // Use vfx-* classes for modal structure
         generalModalContainer.innerHTML = `
-            <div class="studio-bg-elevated rounded-xl shadow-2xl w-full ${currentSizeClass} max-h-[90vh] flex flex-col overflow-hidden border studio-border-strong animate-popIn" id="modal-inner-container">
-                <div class="flex items-center justify-between p-4 sm:p-5 border-b studio-border-soft">
-                    <h2 class="text-lg font-medium vpa-text-main">${sanitizeHTML(title)}</h2>
-                    <button id="vfx-modal-close-btn" aria-label="Close modal" class="p-1 rounded-full vpa-text-subdued hover:bg-gray-700 hover:vpa-text-main focus:outline-none focus:ring-2 focus:ring-purple-500">
-                        ${createIconSpanHTML("close", "default", "w-6 h-6")}
+            <div class="vfx-modal-content ${currentSizeClass} ${state.activeModal?.animationClass || 'vfx-animate-pop-in'}" id="modal-inner-container">
+                <div class="vfx-modal-header">
+                    <h2 class="vfx-modal-title">${sanitizeHTML(title)}</h2>
+                    <button id="vfx-modal-close-btn" aria-label="Close modal" class="vfx-button-icon vfx-button-icon-subtle vfx-modal-close-button">
+                        ${createIconSpanHTML("close", "default", "vfx-icon-medium")}
                     </button>
                 </div>
-                <div class="p-4 sm:p-6 overflow-y-auto flex-grow custom-scrollbar">${bodyHTML}</div>
+                <div class="vfx-modal-body vfx-scrollbar">${bodyHTML}</div>
             </div>
         `;
         const modalCloseBtn = generalModalContainer.querySelector('#vfx-modal-close-btn');
@@ -1403,73 +1434,85 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
     function getModalBodyHTML(type, data, result) {
         switch (type) {
             case 'advancedSettings':
+                // Using vfx-form-grid for layout if defined, or rely on vfx-form-group margins
                 return `
-                    <div class="space-y-6 p-1">
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            ${createSelectFieldHTML("adv-aspectRatio", "Aspect Ratio", state.promptParams.aspectRatio, VEO_ASPECT_RATIOS_DISPLAY, VEO_ASPECT_RATIOS_VALUES, PARAM_INFO_TOOLTIPS.aspectRatio)}
-                            ${createSelectFieldHTML("adv-lighting", "Lighting Conditions", state.promptParams.lighting, VEO_LIGHTING_CONDITIONS, VEO_LIGHTING_CONDITIONS, PARAM_INFO_TOOLTIPS.lighting)}
-                            ${createSelectFieldHTML("adv-cameraAngle", "Camera Angle", state.promptParams.cameraAngle, VEO_CAMERA_ANGLES, VEO_CAMERA_ANGLES, PARAM_INFO_TOOLTIPS.cameraAngle)}
-                            ${createSelectFieldHTML("adv-cameraMovement", "Camera Movement", state.promptParams.cameraMovement, VEO_CAMERA_MOVEMENTS, VEO_CAMERA_MOVEMENTS, PARAM_INFO_TOOLTIPS.cameraMovement)}
-                            ${createSelectFieldHTML("adv-durationHint", "Duration Hint", state.promptParams.durationHint, VEO_DURATION_HINTS, VEO_DURATION_HINTS, PARAM_INFO_TOOLTIPS.durationHint)}
-                            ${createTextFieldHTML("adv-negativePrompt", "Negative Prompt", state.promptParams.negativePrompt, "e.g., blurry, text, watermark", PARAM_INFO_TOOLTIPS.negativePrompt, "md:col-span-2 lg:col-span-3")}
+                    <div class="vfx-form-container">
+                        <div class="vfx-form-grid vfx-grid-cols-3">
+                            ${createSelectFieldHTML("adv-aspectRatio", "Aspect Ratio", state.promptParams.aspectRatio, VEO_ASPECT_RATIOS_DISPLAY, VEO_ASPECT_RATIOS_VALUES, PARAM_INFO_TOOLTIPS.aspectRatio, "vfx-grid-col-span-1")}
+                            ${createSelectFieldHTML("adv-lighting", "Lighting Conditions", state.promptParams.lighting, VEO_LIGHTING_CONDITIONS, VEO_LIGHTING_CONDITIONS, PARAM_INFO_TOOLTIPS.lighting, "vfx-grid-col-span-1")}
+                            ${createSelectFieldHTML("adv-cameraAngle", "Camera Angle", state.promptParams.cameraAngle, VEO_CAMERA_ANGLES, VEO_CAMERA_ANGLES, PARAM_INFO_TOOLTIPS.cameraAngle, "vfx-grid-col-span-1")}
+                            ${createSelectFieldHTML("adv-cameraMovement", "Camera Movement", state.promptParams.cameraMovement, VEO_CAMERA_MOVEMENTS, VEO_CAMERA_MOVEMENTS, PARAM_INFO_TOOLTIPS.cameraMovement, "vfx-grid-col-span-1")}
+                            ${createSelectFieldHTML("adv-durationHint", "Duration Hint", state.promptParams.durationHint, VEO_DURATION_HINTS, VEO_DURATION_HINTS, PARAM_INFO_TOOLTIPS.durationHint, "vfx-grid-col-span-1")}
+                            ${createTextFieldHTML("adv-negativePrompt", "Negative Prompt", state.promptParams.negativePrompt, "e.g., blurry, text, watermark", PARAM_INFO_TOOLTIPS.negativePrompt, "vfx-grid-col-span-3")}
                         </div>
-                        <div class="flex flex-col sm:flex-row justify-end items-center space-y-3 sm:space-y-0 sm:space-x-3 pt-4 border-t studio-border-soft">
-                            <button id="adv-clear-all-btn" class="px-4 py-2 text-sm font-medium rounded-md studio-button-secondary flex items-center" title="Reset advanced fields to default">
-                                ${createIconSpanHTML("delete", "default", "w-4 h-4 mr-2")} Reset Advanced Fields
+                        <div class="vfx-modal-footer">
+                            <button id="adv-clear-all-btn" class="vfx-button vfx-button-secondary vfx-button-icon-left" title="Reset advanced fields to default">
+                                ${createIconSpanHTML("delete", "default", "vfx-icon-small vfx-button-icon-left")} Reset Advanced
                             </button>
-                            <button id="adv-done-btn" class="px-6 py-2 text-sm font-medium rounded-md studio-button-primary">Done</button>
+                            <button id="adv-done-btn" class="vfx-button vfx-button-primary">Done</button>
                         </div>
                     </div>`;
             case 'critique':
                 if (result) {
                     return `
-                        <div class="space-y-4">
+                        <div class="vfx-results-container">
                             <div>
-                                <h4 class="font-semibold text-purple-300 mb-1">Critique:</h4>
-                                <p class="text-sm vpa-text-subdued whitespace-pre-wrap">${sanitizeHTML(result.critique)}</p>
+                                <h4 class="vfx-modal-subheader">Critique:</h4>
+                                <p class="vfx-text-subdued vfx-results-paragraph">${sanitizeHTML(result.critique)}</p>
                             </div>
                             ${result.suggested_enhancements && result.suggested_enhancements.length > 0 ? `
                             <div>
-                                <h4 class="font-semibold text-purple-300 mb-2">Suggested Enhancements:</h4>
-                                <ul class="space-y-3">
+                                <h4 class="vfx-modal-subheader">Suggested Enhancements:</h4>
+                                <ul class="vfx-list">
                                     ${result.suggested_enhancements.map((suggestion, index) => `
-                                        <li class="studio-bg-card-nested p-3 rounded-md border studio-border-soft">
-                                            <p class="text-sm vpa-text-main mb-2 whitespace-pre-wrap">${sanitizeHTML(suggestion)}</p>
-                                            <button data-suggestion-index="${index}" class="critique-apply-btn text-xs studio-button-secondary hover:bg-purple-700 hover:border-purple-600">Apply this Suggestion</button>
+                                        <li class="vfx-list-item vfx-card vfx-card-nested">
+                                            <p class="vfx-text-main vfx-list-item-text">${sanitizeHTML(suggestion)}</p>
+                                            <button data-suggestion-index="${index}" class="vfx-button vfx-button-secondary vfx-button-small critique-apply-btn">Apply this Suggestion</button>
                                         </li>
                                     `).join('')}
                                 </ul>
-                            </div>` : '<p class="vpa-text-subdued">No specific enhancements suggested.</p>'}
+                            </div>` : '<p class="vfx-text-subdued">No specific enhancements suggested.</p>'}
                         </div>`;
                 }
                 return ''; // Return empty or some placeholder if no result yet
             case 'themeExplorer':
                 let themeExplorerContent = `
-                    <div class="space-y-4">
-                        <input type="text" id="theme-explorer-input" value="${sanitizeHTML(data.themeInput || "")}" placeholder="Enter a theme (e.g., 'haunted mansion', 'space western')" class="w-full studio-input-base text-sm" />
-                        <button id="theme-explorer-generate-btn" ${(!data.themeInput || !data.themeInput.trim()) ? 'disabled' : ''} class="w-full studio-button-primary flex items-center justify-center">
-                            ${createIconSpanHTML("auto_awesome", "default", "w-5 h-5 mr-2")} Generate Ideas
+                    <div class="vfx-form-container">
+                        <div class="vfx-form-group vfx-form-group-fullwidth"> <!-- Wrapper for input and random button -->
+                            <label for="theme-explorer-input" class="vfx-label">Theme</label>
+                            <div style="display: flex; gap: var(--vfx-spacing-small);">
+                                <input type="text" id="theme-explorer-input" value="${sanitizeHTML(data.themeInput || "")}" placeholder="Enter a theme or get a random one" class="vfx-input" style="flex-grow: 1;" />
+                                <button id="theme-explorer-random-btn" class="vfx-button vfx-button-secondary vfx-button-icon-only" aria-label="Suggest Random Theme" title="Suggest Random Theme">
+                                    ${createIconSpanHTML("casino", "default", "vfx-icon-medium")}
+                                </button>
+                            </div>
+                        </div>
+                        <button id="theme-explorer-generate-btn" ${(!data.themeInput || !data.themeInput.trim()) ? 'disabled' : ''} class="vfx-button vfx-button-primary vfx-button-fullwidth vfx-button-icon-left">
+                            ${createIconSpanHTML("auto_awesome", "default", "vfx-icon-medium vfx-button-icon-left")} Generate Ideas
                         </button>`;
                 if (result) {
                     themeExplorerContent += `
-                        <div class="space-y-3 max-h-[50vh] overflow-y-auto custom-scrollbar pr-2">
-                            <h3 class="text-lg font-semibold vpa-text-main">Ideas for: <span class="text-purple-400">${sanitizeHTML(result.theme_name)}</span></h3>
+                        <div class="vfx-results-list-container vfx-scrollbar">
+                            <h3 class="vfx-modal-subheader">Ideas for: <span class="vfx-text-accent">${sanitizeHTML(result.theme_name)}</span></h3>
                             ${Object.entries(result).map(([key, ideas]) => {
                                 if (key === 'theme_name' || !Array.isArray(ideas) || ideas.length === 0) return '';
                                 const title = key.replace(/suggested_/g, '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                                 const isAudioCat = key === 'suggested_audio_elements_moods';
                                 return `
-                                    <div key="${key}">
-                                        <h4 class="font-medium vpa-text-subdued mt-2 mb-1">${sanitizeHTML(title)}:</h4>
-                                        <ul class="list-disc list-inside space-y-1 pl-1">
+                                    <div key="${key}" class="vfx-result-category">
+                                        <h4 class="vfx-text-subdued vfx-category-title">${sanitizeHTML(title)}:</h4>
+                                        <ul class="vfx-list vfx-list-disc">
                                             ${(ideas).map(idea => `
-                                                <li data-idea-text="${sanitizeHTML(String(idea))}" data-is-audio="${isAudioCat}" class="theme-apply-idea text-sm vpa-text-faint hover:vpa-text-main hover:text-purple-400 cursor-pointer p-1 rounded hover:bg-purple-500/10 transition-colors" title="Click to add: &quot;${sanitizeHTML(String(idea))}&quot;">
-                                                    ${sanitizeHTML(String(idea))}
+                                                <li class="vfx-list-item vfx-list-item-interactive theme-idea-list-item">
+                                                    <input type="checkbox" class="vfx-checkbox theme-idea-checkbox" data-idea-text="${sanitizeHTML(String(idea))}" data-is-audio="${isAudioCat}" id="theme-idea-${key}-${index}-${idea.replace(/\s+/g, '-')}">
+                                                    <label for="theme-idea-${key}-${index}-${idea.replace(/\s+/g, '-')}" class="vfx-label vfx-checkbox-label">${sanitizeHTML(String(idea))}</label>
                                                 </li>`).join('')}
                                         </ul>
                                     </div>`;
                             }).join('')}
-                        </div>`;
+                        </div>
+                        <button id="theme-explorer-add-selected-btn" class="vfx-button vfx-button-primary vfx-button-fullwidth" style="margin-top: var(--vfx-spacing-medium);" disabled>Add Selected to Prompt</button>
+                        `;
                 }
                 themeExplorerContent += `</div>`;
                 return themeExplorerContent;
@@ -1477,74 +1520,74 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             case 'elaborate':
                  if (result) {
                     return `
-                        <div class="space-y-4">
+                        <div class="vfx-results-container">
                             <div>
-                                <h4 class="font-semibold text-purple-300 mb-1">Original Prompt:</h4>
-                                <p class="text-sm vpa-text-subdued whitespace-pre-wrap p-2 studio-bg-card-nested rounded-md">${sanitizeHTML(data.promptToElaborate.text)}</p>
+                                <h4 class="vfx-modal-subheader">Original Prompt:</h4>
+                                <p class="vfx-text-subdued vfx-card vfx-card-nested vfx-results-paragraph">${sanitizeHTML(data.promptToElaborate.text)}</p>
                             </div>
                             ${result.elaborated_prompts && result.elaborated_prompts.length > 0 ? `
                             <div>
-                                <h4 class="font-semibold text-purple-300 mb-2">Elaborated Suggestions:</h4>
-                                <ul class="space-y-3">
+                                <h4 class="vfx-modal-subheader">Elaborated Suggestions:</h4>
+                                <ul class="vfx-list">
                                     ${result.elaborated_prompts.map((suggestion, index) => `
-                                        <li class="studio-bg-card-nested p-3 rounded-md border studio-border-soft">
-                                            <p class="text-sm vpa-text-main mb-2 whitespace-pre-wrap">${sanitizeHTML(suggestion)}</p>
-                                            <button data-suggestion-index="${index}" class="elaborate-apply-btn text-xs studio-button-secondary hover:bg-purple-700 hover:border-purple-600">Apply this Elaboration</button>
+                                        <li class="vfx-list-item vfx-card vfx-card-nested">
+                                            <p class="vfx-text-main vfx-list-item-text">${sanitizeHTML(suggestion)}</p>
+                                            <button data-suggestion-index="${index}" class="vfx-button vfx-button-secondary vfx-button-small elaborate-apply-btn">Apply this Elaboration</button>
                                         </li>
                                     `).join('')}
                                 </ul>
-                            </div>` : '<p class="vpa-text-subdued">No elaborations generated, or the AI felt the prompt was already quite detailed.</p>'}
+                            </div>` : '<p class="vfx-text-subdued">No elaborations generated, or the AI felt the prompt was already quite detailed.</p>'}
                         </div>`;
                 }
                 return '';
             case 'sequence':
                 if (result) {
                     return `
-                        <div class="space-y-4">
+                        <div class="vfx-results-container">
                             <div>
-                                <h4 class="font-semibold text-purple-300 mb-1">Base Prompt:</h4>
-                                <p class="text-sm vpa-text-subdued whitespace-pre-wrap p-2 studio-bg-card-nested rounded-md">${sanitizeHTML(data.basePrompt.text)}</p>
+                                <h4 class="vfx-modal-subheader">Base Prompt:</h4>
+                                <p class="vfx-text-subdued vfx-card vfx-card-nested vfx-results-paragraph">${sanitizeHTML(data.basePrompt.text)}</p>
                             </div>
                             ${result.suggested_sequence_prompts && result.suggested_sequence_prompts.length > 0 ? `
                             <div>
-                                <h4 class="font-semibold text-purple-300 mb-2">Suggested Next Shots:</h4>
-                                <ul class="space-y-3">
+                                <h4 class="vfx-modal-subheader">Suggested Next Shots:</h4>
+                                <ul class="vfx-list">
                                     ${result.suggested_sequence_prompts.map((suggestion, index) => `
-                                        <li class="studio-bg-card-nested p-3 rounded-md border studio-border-soft">
-                                            <p class="text-sm vpa-text-main mb-2 whitespace-pre-wrap">${sanitizeHTML(suggestion)}</p>
-                                            <div class="flex space-x-2 justify-end">
-                                                <button data-suggestion-index="${index}" class="sequence-add-btn text-xs studio-button-secondary hover:bg-green-700 hover:border-green-600">Add to My Prompts</button>
-                                                <button data-suggestion-text="${sanitizeHTML(suggestion)}" class="sequence-copy-btn text-xs studio-button-secondary hover:bg-purple-700 hover:border-purple-600">Copy</button>
+                                        <li class="vfx-list-item vfx-card vfx-card-nested">
+                                            <p class="vfx-text-main vfx-list-item-text">${sanitizeHTML(suggestion)}</p>
+                                            <div class="vfx-list-item-actions">
+                                                <button data-suggestion-index="${index}" class="vfx-button vfx-button-secondary vfx-button-small sequence-add-btn">Add to My Prompts</button>
+                                                <button data-suggestion-text="${sanitizeHTML(suggestion)}" class="vfx-button vfx-button-secondary vfx-button-small sequence-copy-btn">Copy</button>
                                             </div>
                                         </li>
                                     `).join('')}
                                 </ul>
-                            </div>` : '<p class="vpa-text-subdued">No sequence suggestions generated for this prompt.</p>'}
+                            </div>` : '<p class="vfx-text-subdued">No sequence suggestions generated for this prompt.</p>'}
                         </div>`;
                 }
                 return '';
 
             case 'characterGen':
                 let charGenContent = `
-                    <div class="space-y-4">
-                        <input type="text" id="char-gen-input" value="${sanitizeHTML(data.conceptInput || "")}" placeholder="Enter a basic character concept (e.g., 'a brave knight')" class="w-full studio-input-base text-sm" />
-                        <button id="char-gen-generate-btn" ${(!data.conceptInput || !data.conceptInput.trim()) ? 'disabled' : ''} class="w-full studio-button-primary flex items-center justify-center">
-                            ${createIconSpanHTML("auto_awesome", "default", "w-5 h-5 mr-2")} Generate Details
+                    <div class="vfx-form-container">
+                         ${createTextFieldHTML("char-gen-input", "Character Concept", data.conceptInput || "", "Enter a basic character concept (e.g., 'a brave knight')", "", "vfx-form-group-fullwidth")}
+                        <button id="char-gen-generate-btn" ${(!data.conceptInput || !data.conceptInput.trim()) ? 'disabled' : ''} class="vfx-button vfx-button-primary vfx-button-fullwidth vfx-button-icon-left">
+                            ${createIconSpanHTML("auto_awesome", "default", "vfx-icon-medium vfx-button-icon-left")} Generate Details
                         </button>`;
                 if (result) {
                      charGenContent += `
-                        <div class="space-y-3 max-h-[50vh] overflow-y-auto custom-scrollbar pr-2">
-                            <h3 class="text-lg font-semibold vpa-text-main">Details for: <span class="text-purple-400">${sanitizeHTML(result.character_concept)}</span></h3>
+                        <div class="vfx-results-list-container vfx-scrollbar">
+                            <h3 class="vfx-modal-subheader">Details for: <span class="vfx-text-accent">${sanitizeHTML(result.character_concept)}</span></h3>
                             ${Object.entries(result).map(([key, details]) => {
                                 if (key === 'character_concept' || !Array.isArray(details) || details.length === 0) return '';
                                 const title = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                                 const isAudioCat = key === 'suggested_vocal_characteristics_sounds';
                                 return `
-                                    <div>
-                                        <h4 class="font-medium vpa-text-subdued mt-2 mb-1">${sanitizeHTML(title)}:</h4>
-                                        <ul class="list-disc list-inside space-y-1 pl-1">
+                                    <div class="vfx-result-category">
+                                        <h4 class="vfx-text-subdued vfx-category-title">${sanitizeHTML(title)}:</h4>
+                                        <ul class="vfx-list vfx-list-disc">
                                             ${(details).map(detail => `
-                                                <li data-detail-text="${sanitizeHTML(String(detail))}" data-is-audio="${isAudioCat}" class="char-apply-detail text-sm vpa-text-faint hover:vpa-text-main hover:text-purple-400 cursor-pointer p-1 rounded hover:bg-purple-500/10 transition-colors" title="Click to add: &quot;${sanitizeHTML(String(detail))}&quot;">
+                                                <li data-detail-text="${sanitizeHTML(String(detail))}" data-is-audio="${isAudioCat}" class="vfx-list-item vfx-list-item-interactive char-apply-detail" title="Click to add: &quot;${sanitizeHTML(String(detail))}&quot;">
                                                     ${sanitizeHTML(String(detail))}
                                                 </li>`).join('')}
                                         </ul>
@@ -1557,39 +1600,37 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
 
             case 'styleTransfer':
                  return `
-                    <div class="space-y-4">
+                    <div class="vfx-form-container">
                         <div>
-                            <h4 class="font-semibold text-purple-300 mb-1">Original Prompt:</h4>
-                            <p class="text-sm vpa-text-subdued whitespace-pre-wrap p-2 studio-bg-card-nested rounded-md max-h-40 overflow-y-auto custom-scrollbar">${sanitizeHTML(data.originalPromptText)}</p>
+                            <h4 class="vfx-modal-subheader">Original Prompt:</h4>
+                            <p class="vfx-text-subdued vfx-card vfx-card-nested vfx-card-scrollable vfx-results-paragraph">${sanitizeHTML(data.originalPromptText)}</p>
                         </div>
-                        <div>
-                            <label for="targetStyleSelect" class="block text-sm font-medium vpa-text-subdued mb-1">New Target Style:</label>
-                            <select id="targetStyleSelect" class="w-full studio-input-base text-sm">
-                                ${VEO_STYLES.filter(s => s && s.trim() !== "").map(style => `<option value="${sanitizeHTML(style)}" ${style === data.targetStyle ? 'selected' : ''}>${sanitizeHTML(style)}</option>`).join('')}
-                            </select>
-                        </div>
-                        <button id="style-transfer-execute-btn" ${!data.targetStyle ? 'disabled' : ''} class="w-full studio-button-primary mt-2">Apply Style Transfer</button>
+                        ${createSelectFieldHTML("targetStyleSelect", "New Target Style:", data.targetStyle, VEO_STYLES.filter(s => s && s.trim() !== ""), VEO_STYLES.filter(s => s && s.trim() !== ""), "", "vfx-form-group-fullwidth")}
+                        <button id="style-transfer-execute-btn" ${!data.targetStyle ? 'disabled' : ''} class="vfx-button vfx-button-primary vfx-button-fullwidth">Apply Style Transfer</button>
                     </div>`;
 
             case 'storyboard':
                 let storyboardContent = `
-                    <div class="space-y-4">
-                        <textarea id="storyboard-concept-input" placeholder="Enter core concept or brief prompt for storyboard..." rows="3" class="w-full studio-input-base text-sm">${sanitizeHTML(data.conceptInput || "")}</textarea>
-                        <button id="storyboard-generate-btn" ${(!data.conceptInput || !data.conceptInput.trim()) ? 'disabled' : ''} class="w-full studio-button-primary flex items-center justify-center">
-                            ${createIconSpanHTML("auto_stories", "default", "w-5 h-5 mr-2")} Generate Storyboard
+                    <div class="vfx-form-container">
+                        <div class="vfx-form-group vfx-form-group-fullwidth">
+                             <label for="storyboard-concept-input" class="vfx-label">Core Concept/Prompt:</label>
+                             <textarea id="storyboard-concept-input" placeholder="Enter core concept or brief prompt for storyboard..." rows="3" class="vfx-textarea">${sanitizeHTML(data.conceptInput || "")}</textarea>
+                        </div>
+                        <button id="storyboard-generate-btn" ${(!data.conceptInput || !data.conceptInput.trim()) ? 'disabled' : ''} class="vfx-button vfx-button-primary vfx-button-fullwidth vfx-button-icon-left">
+                            ${createIconSpanHTML("auto_stories", "default", "vfx-icon-medium vfx-button-icon-left")} Generate Storyboard
                         </button>`;
                 if (result) {
                     storyboardContent += `
-                        <div class="space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2 mt-3">
-                            <h3 class="text-lg font-semibold vpa-text-main">Storyboard for: <span class="text-purple-400">${sanitizeHTML(result.original_concept)}</span></h3>
+                        <div class="vfx-results-list-container vfx-scrollbar">
+                            <h3 class="vfx-modal-subheader">Storyboard for: <span class="vfx-text-accent">${sanitizeHTML(result.original_concept)}</span></h3>
                             ${result.storyboard_shots.map(shot => `
-                                <div class="studio-bg-card-nested p-3 rounded-md border studio-border-soft">
-                                    <h4 class="font-medium vpa-text-main mb-1">Shot ${shot.shot_number} ${shot.suggested_shot_type ? `(${sanitizeHTML(shot.suggested_shot_type)})` : ''}</h4>
-                                    ${shot.suggested_camera_angle ? `<p class="text-xs vpa-text-faint mb-1">Angle: ${sanitizeHTML(shot.suggested_camera_angle)}</p>` : ''}
-                                    <p class="text-sm vpa-text-subdued whitespace-pre-wrap mb-2">${sanitizeHTML(shot.description)}</p>
-                                    ${shot.audio_description ? `<div class="mb-2"><p class="text-xs font-semibold vpa-text-faint">Audio:</p><p class="text-xs vpa-text-faint italic">${sanitizeHTML(shot.audio_description)}</p></div>` : ''}
-                                    ${shot.key_elements && shot.key_elements.length > 0 ? `<div class="mb-2"><p class="text-xs font-semibold vpa-text-faint">Key Elements:</p><ul class="list-disc list-inside pl-2 text-xs vpa-text-faint">${shot.key_elements.map(el => `<li>${sanitizeHTML(el)}</li>`).join('')}</ul></div>` : ''}
-                                    <button data-shot-description="${sanitizeHTML(shot.description)}" class="storyboard-apply-shot-btn text-xs studio-button-secondary hover:bg-purple-700 hover:border-purple-600">Use Shot as Base Prompt</button>
+                                <div class="vfx-card vfx-card-nested vfx-list-item">
+                                    <h4 class="vfx-text-main">Shot ${shot.shot_number} ${shot.suggested_shot_type ? `(${sanitizeHTML(shot.suggested_shot_type)})` : ''}</h4>
+                                    ${shot.suggested_camera_angle ? `<p class="vfx-text-faint vfx-text-small">Angle: ${sanitizeHTML(shot.suggested_camera_angle)}</p>` : ''}
+                                    <p class="vfx-text-subdued vfx-list-item-text">${sanitizeHTML(shot.description)}</p>
+                                    ${shot.audio_description ? `<div class="vfx-audio-description"><p class="vfx-text-faint vfx-text-small vfx-font-semibold">Audio:</p><p class="vfx-text-faint vfx-text-small vfx-font-italic">${sanitizeHTML(shot.audio_description)}</p></div>` : ''}
+                                    ${shot.key_elements && shot.key_elements.length > 0 ? `<div class="vfx-key-elements"><p class="vfx-text-faint vfx-text-small vfx-font-semibold">Key Elements:</p><ul class="vfx-list vfx-list-disc vfx-list-small">${shot.key_elements.map(el => `<li>${sanitizeHTML(el)}</li>`).join('')}</ul></div>` : ''}
+                                    <button data-shot-description="${sanitizeHTML(shot.description)}" class="vfx-button vfx-button-secondary vfx-button-small storyboard-apply-shot-btn">Use Shot as Base Prompt</button>
                                 </div>
                             `).join('')}
                         </div>`;
@@ -1597,27 +1638,27 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                 storyboardContent += `</div>`;
                 return storyboardContent;
 
-            case 'visualize':
+            case 'visualize': // This is a UI-only mock
                 let visualizeContent = `
-                    <div class="space-y-4">
+                    <div class="vfx-results-container">
                         <div>
-                            <h4 class="font-semibold text-purple-300 mb-1">Prompt to Visualize:</h4>
-                            <p class="text-sm vpa-text-subdued whitespace-pre-wrap p-3 studio-bg-card-nested rounded-md border studio-border-soft max-h-32 overflow-y-auto custom-scrollbar">
+                            <h4 class="vfx-modal-subheader">Prompt to Visualize:</h4>
+                            <p class="vfx-text-subdued vfx-card vfx-card-nested vfx-card-scrollable vfx-results-paragraph">
                                 ${sanitizeHTML(data.promptToVisualize?.text || "No prompt selected.")}
                             </p>
                         </div>`;
 
-                if (result && result.visualizedImageUrl) {
+                if (result && result.visualizedImageUrl) { // This part is unlikely to be hit if it's UI only
                     visualizeContent += `
-                        <div class="mt-4 border studio-border-soft rounded-lg overflow-hidden bg-black flex justify-center items-center">
-                            <img src="${sanitizeHTML(result.visualizedImageUrl)}" alt="Visualization of the prompt" class="w-auto h-auto max-w-full max-h-[60vh] object-contain" />
+                        <div class="vfx-image-preview-large">
+                            <img src="${sanitizeHTML(result.visualizedImageUrl)}" alt="Visualization of the prompt" />
                         </div>`;
                 } else {
                      visualizeContent += `
-                        <div class="mt-3 p-3 bg-blue-700 bg-opacity-20 text-blue-200 rounded-md text-center">
-                            <p class="font-medium">Image Generation Not Available</p>
-                            <p class="text-sm">This feature is for UI demonstration only in this Tampermonkey script. Actual image generation requires direct API access not available here.</p>
-                            <button id="visualize-acknowledge-btn" class="mt-3 text-xs studio-button-secondary hover:bg-blue-700/30">
+                        <div class="vfx-alert vfx-alert-info">
+                            <p class="vfx-alert-title">Image Generation Not Available</p>
+                            <p class="vfx-alert-message">This feature is for UI demonstration only in this Tampermonkey script. Actual image generation requires direct API access not available here.</p>
+                            <button id="visualize-acknowledge-btn" class="vfx-button vfx-button-secondary vfx-button-small">
                                 Acknowledge
                             </button>
                         </div>`;
@@ -1625,7 +1666,26 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                 visualizeContent += `</div>`;
                 return visualizeContent;
             default:
-                return '<p class="vpa-text-subdued">No content configured for this modal type.</p>';
+                return '<p class="vfx-text-subdued">No content configured for this modal type.</p>';
+            case 'surpriseMeResults':
+                if (data && data.suggestions && data.suggestions.length > 0) {
+                    let suggestionsHTML = '<div class="vfx-list">'; // Using vfx-list for layout
+                    data.suggestions.forEach((suggestion, index) => {
+                        suggestionsHTML += `
+                            <div class="vfx-card vfx-card-nested vfx-list-item">
+                                <p class="vfx-text-main vfx-text-bold">${sanitizeHTML(suggestion.concept)}</p>
+                                <p class="vfx-text-subdued vfx-text-small">Style: ${sanitizeHTML(suggestion.suggestedStyle)}</p>
+                                ${suggestion.suggestedCameraAngle ? `<p class="vfx-text-faint vfx-text-xsmall">Angle: ${sanitizeHTML(suggestion.suggestedCameraAngle)}</p>` : ''}
+                                ${suggestion.suggestedCameraMovement ? `<p class="vfx-text-faint vfx-text-xsmall">Movement: ${sanitizeHTML(suggestion.suggestedCameraMovement)}</p>` : ''}
+                                ${suggestion.suggestedLighting ? `<p class="vfx-text-faint vfx-text-xsmall">Lighting: ${sanitizeHTML(suggestion.suggestedLighting)}</p>` : ''}
+                                ${suggestion.suggestedAudio && state.promptParams.enableAudioPrompting ? `<p class="vfx-text-faint vfx-text-xsmall">Audio: ${sanitizeHTML(suggestion.suggestedAudio.join(', '))}</p>` : ''}
+                                <button data-suggestion-index="${index}" class="vfx-button vfx-button-secondary vfx-button-small surprise-me-apply-btn" style="margin-top: var(--vfx-spacing-small);">Use this concept</button>
+                            </div>`;
+                    });
+                    suggestionsHTML += '</div>';
+                    return suggestionsHTML;
+                }
+                return '<p class="vfx-text-subdued">No suggestions generated, or an error occurred.</p>';
         }
     }
 
@@ -1654,29 +1714,137 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                 });
             });
         } else if (type === 'themeExplorer') {
+            const randomBtn = modalInnerContainer.querySelector('#theme-explorer-random-btn');
             const input = modalInnerContainer.querySelector('#theme-explorer-input');
             const genBtn = modalInnerContainer.querySelector('#theme-explorer-generate-btn');
+            const randomBtn = modalInnerContainer.querySelector('#theme-explorer-random-btn');
+            const addSelectedBtn = modalInnerContainer.querySelector('#theme-explorer-add-selected-btn');
+            const checkboxes = modalInnerContainer.querySelectorAll('.theme-idea-checkbox');
+            const listItems = modalInnerContainer.querySelectorAll('.theme-idea-list-item');
+
+            // Initialize selectedThemeIdeas if it doesn't exist
+            if (state.activeModal && state.activeModal.data && !state.activeModal.data.selectedThemeIdeas) {
+                state.activeModal.data.selectedThemeIdeas = [];
+            }
+
+            function updateAddSelectedButtonState() {
+                if (addSelectedBtn && state.activeModal && state.activeModal.data) {
+                    addSelectedBtn.disabled = state.activeModal.data.selectedThemeIdeas.length === 0;
+                }
+            }
+
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', () => {
+                    if (state.activeModal && state.activeModal.data) {
+                        state.activeModal.data.selectedThemeIdeas = [];
+                        checkboxes.forEach(cb => {
+                            if (cb.checked) {
+                                state.activeModal.data.selectedThemeIdeas.push({
+                                    text: cb.dataset.ideaText,
+                                    isAudio: cb.dataset.isAudio === 'true'
+                                });
+                            }
+                        });
+                        updateAddSelectedButtonState();
+                    }
+                });
+            });
+
+            listItems.forEach(item => {
+                item.addEventListener('click', (e) => {
+                    // Allow clicking on label or list item to toggle checkbox
+                    const checkbox = item.querySelector('.theme-idea-checkbox');
+                    if (checkbox && e.target !== checkbox) { // Avoid double-toggling if checkbox itself is clicked
+                        checkbox.checked = !checkbox.checked;
+                        // Manually dispatch change event
+                        const changeEvent = new Event('change', { bubbles: true });
+                        checkbox.dispatchEvent(changeEvent);
+                    }
+                });
+            });
+
+            if (addSelectedBtn) {
+                addSelectedBtn.addEventListener('click', () => {
+                    if (state.activeModal && state.activeModal.data && state.activeModal.data.selectedThemeIdeas) {
+                        const selectedIdeas = state.activeModal.data.selectedThemeIdeas;
+                        let nonAudioIdeas = [];
+                        let audioIdeas = [];
+
+                        selectedIdeas.forEach(idea => {
+                            if (idea.isAudio) {
+                                audioIdeas.push(idea.text);
+                            } else {
+                                nonAudioIdeas.push(idea.text);
+                            }
+                        });
+
+                        let newPromptText = state.promptParams.description || "";
+
+                        if (nonAudioIdeas.length > 0) {
+                            if (newPromptText && !newPromptText.endsWith(" ") && !newPromptText.endsWith(",")) {
+                                newPromptText += ", ";
+                            }
+                            newPromptText += nonAudioIdeas.join(', ');
+                        }
+
+                        if (audioIdeas.length > 0 && state.promptParams.enableAudioPrompting) {
+                            const audioPrefix = "Audio: ";
+                            if (newPromptText.includes(audioPrefix)) {
+                                // Append to existing audio cues
+                                newPromptText += ", " + audioIdeas.join(', ');
+                            } else {
+                                if (newPromptText && !newPromptText.endsWith(" ") && !newPromptText.endsWith(".")) {
+                                    newPromptText += ". ";
+                                }
+                                newPromptText += audioPrefix + audioIdeas.join(', ');
+                            }
+                        }
+
+                        state.promptParams.description = newPromptText;
+
+                        // Clear selections and close
+                        state.activeModal.data.selectedThemeIdeas = [];
+                        checkboxes.forEach(cb => cb.checked = false);
+                        updateAddSelectedButtonState(); // Should disable the button
+                        closeModal();
+                        renderApp(); // Update main textarea
+                        mainTextarea.focus();
+                    }
+                });
+            }
+
+
+            if (randomBtn && input) {
+                randomBtn.addEventListener('click', () => {
+                    if (PREDEFINED_THEMES && PREDEFINED_THEMES.length > 0) {
+                        const randomIndex = Math.floor(Math.random() * PREDEFINED_THEMES.length);
+                        const randomTheme = PREDEFINED_THEMES[randomIndex];
+                        input.value = randomTheme;
+                        if (state.activeModal && state.activeModal.data) {
+                            state.activeModal.data.themeInput = randomTheme;
+                        }
+                        if(genBtn) genBtn.disabled = false;
+                        renderApp();
+                    }
+                });
+            }
+
             if (input) {
                 input.addEventListener('input', (e) => {
-                    state.activeModal.data.themeInput = e.target.value;
+                    if (state.activeModal && state.activeModal.data) {
+                        state.activeModal.data.themeInput = e.target.value;
+                    }
                     if(genBtn) genBtn.disabled = (!e.target.value || !e.target.value.trim());
                 });
             }
             if (genBtn) {
                 genBtn.addEventListener('click', () => {
-                    if (state.activeModal.data.themeInput && state.activeModal.data.themeInput.trim()) {
+                    if (state.activeModal && state.activeModal.data && state.activeModal.data.themeInput && state.activeModal.data.themeInput.trim()) {
                         handleGenerateThematicIdeas(state.activeModal.data.themeInput);
                     }
                 });
             }
-            modalInnerContainer.querySelectorAll('.theme-apply-idea').forEach(item => {
-                item.addEventListener('click', (e) => {
-                    const ideaText = e.currentTarget.dataset.ideaText;
-                    const isAudio = e.currentTarget.dataset.isAudio === 'true';
-                    handleApplyThematicIdea(ideaText, isAudio);
-                    if (!isAudio) closeModal();
-                });
-            });
+            // Removed old .theme-apply-idea listener as checkboxes are now the primary mechanism
         } else if (type === 'elaborate') {
             modalInnerContainer.querySelectorAll('.elaborate-apply-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
@@ -1753,6 +1921,73 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         } else if (type === 'visualize') {
             const ackBtn = modalInnerContainer.querySelector('#visualize-acknowledge-btn');
             if(ackBtn) ackBtn.addEventListener('click', closeModal);
+        } else if (type === 'surpriseMeResults') {
+            modalInnerContainer.querySelectorAll('.surprise-me-apply-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const suggestionIndex = parseInt(e.currentTarget.dataset.suggestionIndex, 10);
+                    const suggestion = state.activeModal.data.suggestions[suggestionIndex];
+                    if (suggestion) {
+                        let conceptWithAudio = suggestion.concept;
+                        if (state.promptParams.enableAudioPrompting && suggestion.suggestedAudio && Array.isArray(suggestion.suggestedAudio) && suggestion.suggestedAudio.length > 0) {
+                            conceptWithAudio += ` Audio: ${suggestion.suggestedAudio.join(', ')}.`;
+                        }
+                        state.promptParams = {
+                            ...state.promptParams,
+                            description: conceptWithAudio,
+                            style: suggestion.suggestedStyle || "",
+                            cameraAngle: suggestion.suggestedCameraAngle || '',
+                            cameraMovement: suggestion.suggestedCameraMovement || '',
+                            lighting: suggestion.suggestedLighting || '',
+                            // Reset numberOfPrompts or keep as is? For now, keep.
+                        };
+                        state.generatedPrompts = [];
+                        handleClearImage(); // Clear image if any
+                        clearError();
+                        closeModal();
+                        renderApp();
+                        mainTextarea.focus();
+                    }
+                });
+            });
+        } else if (type === 'promptHistory') {
+            modalInnerContainer.querySelectorAll('.prompt-history-use-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const historyIndex = parseInt(e.currentTarget.dataset.historyIndex, 10);
+                    const promptToUse = state.promptHistory[historyIndex];
+                    if (promptToUse) {
+                        state.promptParams.description = promptToUse;
+                        addPromptToHistory(promptToUse); // Move to top
+                        state.generatedPrompts = [];
+                        handleClearImage();
+                        clearError();
+                        closeModal();
+                        renderApp();
+                        mainTextarea.focus();
+                    }
+                });
+            });
+
+            modalInnerContainer.querySelectorAll('.prompt-history-delete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const historyIndex = parseInt(e.currentTarget.dataset.historyIndex, 10);
+                    if (historyIndex >= 0 && historyIndex < state.promptHistory.length) {
+                        state.promptHistory.splice(historyIndex, 1);
+                        savePromptHistory();
+                        renderApp(); // Re-render the modal content
+                    }
+                });
+            });
+
+            const clearAllBtn = modalInnerContainer.querySelector('#prompt-history-clear-all-btn');
+            if (clearAllBtn) {
+                clearAllBtn.addEventListener('click', () => {
+                    if (confirm("Are you sure you want to clear all prompt history? This cannot be undone.")) {
+                        state.promptHistory = [];
+                        savePromptHistory();
+                        renderApp(); // Re-render the modal content
+                    }
+                });
+            }
         }
     }
     // --- END: Modal Rendering ---
@@ -1833,6 +2068,17 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
     async function handleSubmitPrompt() {
         if ((!state.promptParams.description || !state.promptParams.description.trim()) && !state.uploadedImage) {
             showError("Please describe your vision or upload an image.");
+            return;
+        }
+
+        // Add current prompt to history before generating
+        if (state.promptParams.description && state.promptParams.description.trim()) {
+            addPromptToHistory(state.promptParams.description);
+        }
+
+        showLoading(state.activeMode === 'sceneExtender' ? "Extending scene..." : "Crafting prompts...");
+        state.generatedPrompts = []; // Clear previous prompts
+        clearError();
             return;
         }
         showLoading(state.activeMode === 'sceneExtender' ? "Extending scene..." : "Crafting prompts...");
@@ -1971,35 +2217,50 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
     }
 
     async function handleSurpriseMe() {
-        showLoading("Conjuring a random concept...");
-        handleClearImage(); // Clear any existing image
-        state.activeMode = "generator"; // Switch to generator mode for surprise me
+        showLoading("Conjuring random concepts..."); // Updated loading message
+        handleClearImage();
+        state.activeMode = "generator";
         clearError();
+        // state.surpriseMeSuggestions = []; // Not strictly needed if modal receives data directly
+
+        const categoryHint = state.promptParams.style || 'Any'; // Use current style as category hint
+
         try {
-            const surprise = await callArtisanApiInternal('surpriseMe', "Generate a random concept.", state.promptParams);
-            if (surprise && surprise.concept && surprise.suggestedStyle) {
-                let conceptWithAudio = surprise.concept;
-                if (state.promptParams.enableAudioPrompting && surprise.suggestedAudio && Array.isArray(surprise.suggestedAudio) && surprise.suggestedAudio.length > 0) {
-                    conceptWithAudio += ` Audio: ${surprise.suggestedAudio.join(', ')}.`;
-                }
-                state.promptParams = {
-                    ...state.promptParams, // Keep existing audio toggle, aspect ratio etc. if desired for surprise me
-                    description: conceptWithAudio,
-                    style: surprise.suggestedStyle,
-                    cameraAngle: surprise.suggestedCameraAngle || '',
-                    cameraMovement: surprise.suggestedCameraMovement || '',
-                    lighting: surprise.suggestedLighting || '',
-                    numberOfPrompts: VEO_PROMPT_COUNT_OPTIONS_VALUES[0],
-                };
-                state.generatedPrompts = [];
+            // The preamble for surpriseMe now accepts 'category' in its function signature.
+            // callArtisanApiInternal needs to be able to pass this.
+            // The PREAMBLE_CONFIG.surpriseMe.audioOn and audioOff functions now take 'category'
+            // So, we retrieve the preamble function first, then call it with the category.
+
+            const audioSuffix = state.promptParams.enableAudioPrompting ? 'On' : 'Off';
+            let preambleTemplateFunction = PREAMBLE_CONFIG.surpriseMe[audioSuffix];
+            // let constructedPreamble = preambleTemplateFunction(categoryHint); // This line is not used if preamble is constructed inside callArtisanApiInternal
+
+            // The callArtisanApiInternal function's 'surpriseMe' case for preamble construction
+            // was PREAMBLE_CONFIG[apiActionKey]() which doesn't pass category.
+            // This needs to be adjusted, OR we pass the already constructed preamble.
+            // For minimal changes to callArtisanApiInternal, the category hint is passed in promptText.
+            // The preambles (audioOn/audioOff for surpriseMe) have been updated to extract this.
+
+            const suggestionsArray = await callArtisanApiInternal(
+                'surpriseMe',
+                `User-selected category hint: ${categoryHint}`, // Pass category hint in prompt
+                state.promptParams,
+                {} // No specific feature data needed here as category is in prompt for preamble
+            );
+
+            if (Array.isArray(suggestionsArray) && suggestionsArray.length > 0 && suggestionsArray.every(s => s.concept && s.suggestedStyle)) {
+                openModal('surpriseMeResults', { suggestions: suggestionsArray });
             } else {
-                throw new Error("Surprise concept response was malformed or missing key fields (concept, suggestedStyle).");
+                console.error("Surprise Me response was not a valid array of suggestions:", suggestionsArray);
+                throw new Error("Surprise Me feature did not return valid concept suggestions. Expected an array of objects with 'concept' and 'suggestedStyle'.");
             }
         } catch (err) {
-            showError(err.message || "Surprise Me failed.");
-        } finally {
-            hideLoading();
+            showError(err.message || "Surprise Me feature failed to generate concepts.");
+            if (state.isLoading) {
+                hideLoading();
+            }
         }
+        // No finally hideLoading() here, as openModal or showError should handle it.
     }
 
     function handleInspirationSelect(inspiration) {
@@ -2127,98 +2388,83 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
 
     // --- START: UI Creation ---
     function createSelectFieldHTML(id, label, value, optionsDisplay, optionsValues, tooltipText = "", className = "") {
+        // Added base class 'vfx-form-group' to className for consistent spacing if needed
+        const groupClass = className ? `vfx-form-group ${className}` : "vfx-form-group";
         return `
-            <div class="${className}">
-                <div class="flex items-center mb-1">
-                    <label for="${id}" class="block text-xs font-medium vpa-text-subdued">${label}</label>
-                    ${tooltipText ? `<div class="relative inline-flex ml-2 info-tooltip-trigger" title="${sanitizeHTML(tooltipText)}">${createIconSpanHTML("info", "default", "w-4 h-4 text-gray-400 hover:text-gray-200 cursor-help")}</div>` : ''}
+            <div class="${groupClass}">
+                <div class="vfx-label-container">
+                    <label for="${id}" class="vfx-label">${label}</label>
+                    ${tooltipText ? `<div class="vfx-tooltip-trigger" title="${sanitizeHTML(tooltipText)}">${createIconSpanHTML("info", "default", "vfx-icon-small vfx-icon-info")}</div>` : ''}
                 </div>
-                <select id="${id}" class="w-full studio-input-base text-sm">
+                <select id="${id}" class="vfx-input vfx-select">
                     ${optionsDisplay.map((display, index) => `<option value="${sanitizeHTML(String(optionsValues[index]))}" ${String(optionsValues[index]) === String(value) ? 'selected' : ''}>${sanitizeHTML(display === "" ? "Any / Auto" : display)}</option>`).join('')}
                 </select>
             </div>`;
     }
     function createTextFieldHTML(id, label, value, placeholder, tooltipText = "", className = "") {
+        const groupClass = className ? `vfx-form-group ${className}` : "vfx-form-group";
          return `
-            <div class="${className}">
-                <div class="flex items-center mb-1">
-                    <label for="${id}" class="block text-xs font-medium vpa-text-subdued">${label}</label>
-                    ${tooltipText ? `<div class="relative inline-flex ml-2 info-tooltip-trigger" title="${sanitizeHTML(tooltipText)}">${createIconSpanHTML("info", "default", "w-4 h-4 text-gray-400 hover:text-gray-200 cursor-help")}</div>` : ''}
+            <div class="${groupClass}">
+                <div class="vfx-label-container">
+                    <label for="${id}" class="vfx-label">${label}</label>
+                    ${tooltipText ? `<div class="vfx-tooltip-trigger" title="${sanitizeHTML(tooltipText)}">${createIconSpanHTML("info", "default", "vfx-icon-small vfx-icon-info")}</div>` : ''}
                 </div>
-                <input type="text" id="${id}" value="${sanitizeHTML(value || "")}" placeholder="${sanitizeHTML(placeholder)}" class="w-full studio-input-base text-sm" />
+                <input type="text" id="${id}" value="${sanitizeHTML(value || "")}" placeholder="${sanitizeHTML(placeholder)}" class="vfx-input" />
             </div>`;
     }
 
     function createToggleButton() {
         toggleButton = document.createElement('button');
         toggleButton.id = TOGGLE_BUTTON_ID;
+        // Apply vfx-button classes directly, specific styling via CSS for #${TOGGLE_BUTTON_ID}
+        toggleButton.className = "vfx-button vfx-button-primary vfx-button-float"; // New base classes
         toggleButton.innerHTML = `
-            <div class="toggle-icon">
-                ${createIconSpanHTML("ArtisanIcon", "default", "w-6 h-6")}
-            </div>
+            ${createIconSpanHTML("ArtisanIcon", "default", "vfx-icon-large")}
         `;
         toggleButton.title = "Toggle Veo Prompt Artisan UI";
-        toggleButton.className = "fixed bottom-5 right-5 z-[9998] p-3 rounded-full shadow-lg border transition-all duration-200 ease-in-out vfx-enhanced-toggle";
-        toggleButton.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-        toggleButton.style.borderColor = '#667eea';
-        toggleButton.style.color = 'white';
-        toggleButton.style.width = '60px';
-        toggleButton.style.height = '60px';
-        toggleButton.style.display = 'flex';
-        toggleButton.style.alignItems = 'center';
-        toggleButton.style.justifyContent = 'center';
-        
+        // Removed direct style manipulation, should be handled by CSS.
+        // For active/inactive state, we can toggle a class like 'vfx-button-active' if needed.
+
         document.body.appendChild(toggleButton);
-        
+
         toggleButton.addEventListener('click', () => {
             if (overlayContainer) {
                 const isHidden = overlayContainer.style.display === 'none';
                 overlayContainer.style.display = isHidden ? 'flex' : 'none';
-                
-                // Update button appearance
+                windowState.isVisible = isHidden; // Update state
+                saveWindowState(); // Save state
+
+                // Toggle an active class on the button if needed for styling
                 if (isHidden) {
-                    toggleButton.style.background = 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
-                    toggleButton.style.transform = 'scale(1.1)';
+                    toggleButton.classList.add('vfx-button-active'); // Example active class
                 } else {
-                    toggleButton.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-                    toggleButton.style.transform = 'scale(1)';
+                    toggleButton.classList.remove('vfx-button-active');
                 }
             }
         });
-        
-        // Add hover effects
-        toggleButton.addEventListener('mouseenter', () => {
-            toggleButton.style.transform = 'translateY(-2px) scale(1.05)';
-            toggleButton.style.boxShadow = '0 12px 35px rgba(102, 126, 234, 0.4)';
-        });
-        
-        toggleButton.addEventListener('mouseleave', () => {
-            const isActive = overlayContainer && overlayContainer.style.display !== 'none';
-            toggleButton.style.transform = isActive ? 'scale(1.1)' : 'scale(1)';
-            toggleButton.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.3)';
-        });
+        // Hover effects should be handled by CSS :hover states on .vfx-button or #${TOGGLE_BUTTON_ID}
     }
 
 
     function createOverlayUI() {
         overlayContainer = document.createElement('div');
         overlayContainer.id = OVERLAY_ID;
-        overlayContainer.className = "vfx-floating-window";
+        // Classes managed by GM_addStyle :root and #${OVERLAY_ID}
         overlayContainer.style.display = 'none'; // Start hidden
         overlayContainer.style.position = 'fixed';
         overlayContainer.style.width = windowState.width + 'px';
         overlayContainer.style.height = windowState.height + 'px';
-        overlayContainer.style.right = '20px';
-        overlayContainer.style.top = windowState.y + 'px';
+        overlayContainer.style.right = '20px'; // Initial position, will be updated by loadWindowState
+        overlayContainer.style.top = windowState.y + 'px';   // Initial position
         overlayContainer.style.zIndex = '9999';
-        overlayContainer.style.borderRadius = '12px';
-        overlayContainer.style.border = '1px solid rgba(255, 255, 255, 0.1)';
-        overlayContainer.style.boxShadow = '0 20px 60px rgba(0, 0, 0, 0.5)';
-        overlayContainer.style.backgroundColor = '#121212'; // Solid background, no blur
-        overlayContainer.style.color = '#ffffff';
-        overlayContainer.style.fontFamily = "'Google Sans Text', 'Google Sans', 'Space Grotesk', sans-serif";
-        overlayContainer.style.overflow = 'hidden';
-        overlayContainer.style.flexDirection = 'column';
+        // overlayContainer.style.borderRadius = 'var(--vfx-border-radius-large)'; // Applied by CSS
+        // overlayContainer.style.border = '1px solid var(--vfx-border-color-strong)'; // Applied by CSS
+        // overlayContainer.style.boxShadow = 'var(--vfx-shadow-xl)'; // Applied by CSS
+        // overlayContainer.style.backgroundColor = 'var(--vfx-background-base)'; // Applied by CSS
+        // overlayContainer.style.color = 'var(--vfx-text-main)'; // Applied by CSS
+        // overlayContainer.style.fontFamily = 'var(--vfx-font-family-sans)'; // Applied by CSS
+        overlayContainer.style.overflow = 'hidden'; // Keep this for main container
+        overlayContainer.style.flexDirection = 'column'; // Keep this for main container structure
         overlayContainer.style.minWidth = windowState.minWidth + 'px';
         overlayContainer.style.minHeight = windowState.minHeight + 'px';
         overlayContainer.style.maxWidth = windowState.maxWidth + 'px';
@@ -2226,122 +2472,123 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
 
         overlayContainer.innerHTML = `
             <!-- Enhanced Draggable Header -->
-            <header class="vfx-window-header studio-bg-base studio-border-soft border-b px-4 py-2 sm:px-6 sticky top-0 z-30" style="cursor: grab; user-select: none;">
-                <div class="w-full max-w-7xl mx-auto flex items-center justify-between h-12">
-                    <div class="flex items-center space-x-2">
-                        ${createIconSpanHTML("ArtisanIcon", "default", "w-7 h-7 text-purple-500")}
-                        <h1 class="text-lg font-medium vpa-text-main"> Veo <span class="font-normal vpa-text-subdued">Prompt Artisan</span></h1>
+            <header class="vfx-header" style="cursor: grab; user-select: none;">
+                <div class="vfx-header-content">
+                    <div class="vfx-header-title-area">
+                        ${createIconSpanHTML("ArtisanIcon", "default", "vfx-icon-large vfx-icon-accent")}
+                        <h1 class="vfx-header-title"> Veo <span class="vfx-header-subtitle">Prompt Artisan</span></h1>
                     </div>
-                    <div class="flex items-center space-x-2">
-                        <button id="vfx-minimize-btn" class="p-1.5 rounded-full vpa-text-subdued hover:vpa-text-main hover:bg-yellow-600" title="Minimize">
+                    <div class="vfx-window-controls">
+                        <button id="vfx-minimize-btn" class="vfx-button-icon vfx-button-icon-yellow" title="Minimize">
                             <span style="font-family: monospace;">−</span>
                         </button>
-                        <button id="vfx-maximize-btn" class="p-1.5 rounded-full vpa-text-subdued hover:vpa-text-main hover:bg-green-600" title="Maximize">
+                        <button id="vfx-maximize-btn" class="vfx-button-icon vfx-button-icon-green" title="Maximize">
                             <span style="font-family: monospace;">□</span>
                         </button>
-                        <button id="vfx-artisan-close-overlay" class="p-1.5 rounded-full vpa-text-subdued hover:vpa-text-main hover:bg-red-600" title="Close Overlay">
-                            ${createIconSpanHTML("close", "default", "w-6 h-6")}
+                        <button id="vfx-artisan-close-overlay" class="vfx-button-icon vfx-button-icon-red" title="Close Overlay">
+                            ${createIconSpanHTML("close", "default", "vfx-icon-medium")}
                         </button>
                     </div>
                 </div>
             </header>
 
             <!-- Resize Handles -->
-            <div class="resize-handle resize-handle-n" data-direction="n" style="position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 20px; height: 4px; cursor: ns-resize; z-index: 10;"></div>
-            <div class="resize-handle resize-handle-s" data-direction="s" style="position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 20px; height: 4px; cursor: ns-resize; z-index: 10;"></div>
-            <div class="resize-handle resize-handle-e" data-direction="e" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 4px; height: 20px; cursor: ew-resize; z-index: 10;"></div>
-            <div class="resize-handle resize-handle-w" data-direction="w" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 4px; height: 20px; cursor: ew-resize; z-index: 10;"></div>
-            <div class="resize-handle resize-handle-ne" data-direction="ne" style="position: absolute; top: 0; right: 0; width: 12px; height: 12px; cursor: ne-resize; z-index: 10;"></div>
-            <div class="resize-handle resize-handle-nw" data-direction="nw" style="position: absolute; top: 0; left: 0; width: 12px; height: 12px; cursor: nw-resize; z-index: 10;"></div>
-            <div class="resize-handle resize-handle-se" data-direction="se" style="position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; cursor: se-resize; z-index: 10;"></div>
-            <div class="resize-handle resize-handle-sw" data-direction="sw" style="position: absolute; bottom: 0; left: 0; width: 12px; height: 12px; cursor: sw-resize; z-index: 10;"></div>
+            <div class="vfx-resize-handle vfx-resize-handle-n" data-direction="n"></div>
+            <div class="vfx-resize-handle vfx-resize-handle-s" data-direction="s"></div>
+            <div class="vfx-resize-handle vfx-resize-handle-e" data-direction="e"></div>
+            <div class="vfx-resize-handle vfx-resize-handle-w" data-direction="w"></div>
+            <div class="vfx-resize-handle vfx-resize-handle-ne" data-direction="ne"></div>
+            <div class="vfx-resize-handle vfx-resize-handle-nw" data-direction="nw"></div>
+            <div class="vfx-resize-handle vfx-resize-handle-se" data-direction="se"></div>
+            <div class="vfx-resize-handle vfx-resize-handle-sw" data-direction="sw"></div>
 
-            <!-- Mode Switcher - Updated to match reference -->
-            <div class="px-4 sm:px-6 md:px-8 pt-4">
-                <div id="vfx-mode-switcher" class="max-w-4xl mx-auto flex rounded-lg overflow-hidden">
-                    <button data-mode="generator" class="mode-btn flex-1 py-2 px-3 text-sm font-medium transition-all focus:outline-none" style="background-color: #7C3AED; color: white;">Generator</button>
-                    <button data-mode="sceneExtender" class="mode-btn flex-1 py-2 px-3 text-sm font-medium transition-all focus:outline-none" style="background-color: #374151; color: #9CA3AF;">Scene Extender</button>
+            <!-- Mode Switcher -->
+            <div class="vfx-mode-switcher-container">
+                <div id="vfx-mode-switcher" class="vfx-mode-switcher">
+                    <button data-mode="generator" class="vfx-button vfx-mode-button vfx-mode-button-active">Generator</button>
+                    <button data-mode="sceneExtender" class="vfx-button vfx-mode-button">Scene Extender</button>
                 </div>
-                <p id="vfx-scene-extender-notice" class="max-w-4xl mx-auto text-xs vpa-text-faint mt-2 text-center bg-slate-700/50 p-2 rounded-md" style="display:none;">
+                <p id="vfx-scene-extender-notice" class="vfx-mode-notice" style="display:none;">
                     Scene Extender mode: Provide a description of an existing scene. The AI will generate a new, extended scene description. Image references are highly recommended.
                 </p>
             </div>
 
-            <!-- Main Content Area - Updated to match reference -->
-            <main class="flex-grow flex flex-col items-center justify-start p-4 sm:px-6 md:px-8 sm:pt-2 md:pt-4 overflow-y-auto relative text-center custom-scrollbar">
-                <div id="vfx-artisan-main-content">
+            <!-- Main Content Area -->
+            <main class="vfx-main-content-area">
+                <div id="vfx-artisan-main-content" class="vfx-main-content-inner">
                     <!-- Loader or error will go here -->
                 </div>
-                <div id="vfx-artisan-welcome" class="flex flex-col items-center justify-start animate-fadeIn max-w-3xl w-full mt-8 space-y-12">
-                    <div class="text-center p-6 rounded-lg studio-bg-elevated border studio-border-soft w-full">
-                        ${createIconSpanHTML("ArtisanIcon", "default", "w-12 h-12 text-purple-500 mb-6 mx-auto")}
-                        <h2 class="text-3xl font-semibold vpa-text-main mb-3">Welcome to Veo Prompt Artisan</h2>
-                        <p class="text-lg vpa-text-subdued mb-8">Craft the perfect vision. Describe your idea, or upload an image to start.</p>
-                        <button id="vfx-surprise-me-welcome" class="px-6 py-3 text-base font-medium rounded-lg bg-purple-600 text-white hover:bg-purple-700 inline-flex items-center transition-all duration-150 ease-in-out transform hover:scale-105 focus:outline-none">
-                            ${createIconSpanHTML("lightbulb", "default", "w-5 h-5 mr-2.5 text-yellow-400")}
+                <div id="vfx-artisan-welcome" class="vfx-welcome-screen">
+                    <div class="vfx-welcome-card">
+                        ${createIconSpanHTML("ArtisanIcon", "default", "vfx-icon-xlarge vfx-icon-accent vfx-welcome-icon")}
+                        <h2 class="vfx-welcome-title">Welcome to Veo Prompt Artisan</h2>
+                        <p class="vfx-welcome-subtitle">Craft the perfect vision. Describe your idea, or upload an image to start.</p>
+                        <button id="vfx-surprise-me-welcome" class="vfx-button vfx-button-primary vfx-button-large">
+                            ${createIconSpanHTML("lightbulb", "default", "vfx-icon-medium vfx-icon-yellow vfx-button-icon-left")}
                             Get a Random Concept
                         </button>
                     </div>
-                    <div class="w-full">
-                        <h3 class="text-xl vpa-text-subdued font-medium mb-5">Or explore these themes for inspiration:</h3>
-                        <div id="vfx-inspiration-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                    <div class="vfx-inspiration-section">
+                        <h3 class="vfx-inspiration-title">Or explore these themes for inspiration:</h3>
+                        <div id="vfx-inspiration-container" class="vfx-inspiration-grid">
                             ${INSPIRATION_PROMPTS.map((insp, index) => `
-                                <button data-inspiration-index="${index}" class="inspiration-card studio-bg-elevated p-5 rounded-xl border studio-border-soft text-left hover:bg-gray-800 transition-all duration-200 ease-in-out focus:outline-none h-auto min-h-[140px] flex flex-col transform hover:-translate-y-1" aria-label="Try theme: ${sanitizeHTML(insp.title)}">
-                                    <h4 class="font-semibold text-purple-400 mb-3 text-base">${sanitizeHTML(insp.title)}</h4>
-                                    <p class="text-sm vpa-text-subdued flex-grow mb-4 leading-relaxed">${sanitizeHTML(insp.concept.length > 120 ? insp.concept.substring(0, 120) + '...' : insp.concept)}</p>
-                                    <span class="mt-auto text-xs text-purple-500 font-medium self-start group"> Use Theme ${createIconSpanHTML("arrow_forward", "symbols-outlined", "w-3 h-3 inline-block transition-transform duration-150 ease-in-out group-hover:translate-x-1")}</span>
+                                <button data-inspiration-index="${index}" class="vfx-card vfx-inspiration-card" aria-label="Try theme: ${sanitizeHTML(insp.title)}">
+                                    <h4 class="vfx-inspiration-card-title">${sanitizeHTML(insp.title)}</h4>
+                                    <p class="vfx-inspiration-card-concept">${sanitizeHTML(insp.concept.length > 120 ? insp.concept.substring(0, 120) + '...' : insp.concept)}</p>
+                                    <span class="vfx-inspiration-card-cta"> Use Theme ${createIconSpanHTML("arrow_forward", "symbols-outlined", "vfx-icon-small vfx-icon-cta-arrow")}</span>
                                 </button>
                             `).join('')}
                         </div>
                     </div>
                 </div>
-                <div id="vfx-artisan-prompt-list" class="w-full max-w-3xl mx-auto animate-fadeIn mt-6" style="display:none;">
+                <div id="vfx-artisan-prompt-list" class="vfx-prompt-list-container" style="display:none;">
                     <!-- Generated prompts will be rendered here by renderPromptList -->
                 </div>
             </main>
 
-            <!-- Footer / Input Area - Updated to match reference -->
-            <div id="vfx-prompt-input-footer-wrapper" class="sticky bottom-0 z-20 w-full pointer-events-auto bg-black bg-opacity-50 backdrop-blur-md studio-border-soft border-t p-3 sm:p-4">
-                <div class="max-w-4xl mx-auto space-y-3">
+            <!-- Footer / Input Area -->
+            <div id="vfx-prompt-input-footer-wrapper" class="vfx-footer">
+                <div class="vfx-footer-content">
                     <div id="vfx-image-preview-container"></div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 items-center">
-                        <div id="footer-audio-toggle" class="md:col-span-2 lg:col-span-1 flex items-center py-1 px-3 rounded-lg border ${state.promptParams.enableAudioPrompting ? 'border-purple-500/40 bg-purple-500/10' : 'border-gray-500/20 bg-gray-500/5'} transition-all duration-200">
-                             <button type="button" role="switch" aria-checked="${state.promptParams.enableAudioPrompting}" id="vfx-enable-audio-toggle" class="${state.promptParams.enableAudioPrompting ? 'bg-purple-600' : 'bg-gray-600'} relative inline-flex items-center h-6 rounded-full w-11 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800" style="pointer-events: auto !important; cursor: pointer !important;">
-                                <span class="${state.promptParams.enableAudioPrompting ? 'translate-x-6' : 'translate-x-1'} inline-block w-4 h-4 transform bg-white rounded-full transition-transform duration-200 shadow-lg"></span>
+                    <div class="vfx-footer-grid">
+                        <div id="footer-audio-toggle" class="vfx-audio-toggle-container">
+                             <button type="button" role="switch" aria-checked="${state.promptParams.enableAudioPrompting}" id="vfx-enable-audio-toggle" class="vfx-toggle-switch ${state.promptParams.enableAudioPrompting ? 'vfx-toggle-switch-active' : ''}">
+                                <span class="vfx-toggle-switch-knob"></span>
                             </button>
-                            <label for="vfx-enable-audio-toggle" class="ml-2 text-sm font-medium vpa-text-subdued cursor-pointer select-none">Enable Audio Prompting</label>
-                            <span class="ml-2 text-xs ${state.promptParams.enableAudioPrompting ? 'text-purple-400' : 'text-gray-500'} font-medium transition-colors duration-200 audio-status-indicator">
+                            <label for="vfx-enable-audio-toggle" class="vfx-label vfx-toggle-label">Enable Audio Prompting</label>
+                            <span class="vfx-audio-status-indicator ${state.promptParams.enableAudioPrompting ? 'vfx-text-accent' : 'vfx-text-faint'}">
                                 ${state.promptParams.enableAudioPrompting ? '🎵 ON' : '🔇 OFF'}
                             </span>
-                            <div class="relative inline-flex ml-2 info-tooltip-trigger" title="${sanitizeHTML(PARAM_INFO_TOOLTIPS.enableAudioPrompting)}">${createIconSpanHTML("info", "default", "w-4 h-4 text-gray-400 hover:text-gray-200 cursor-help")}</div>
+                            <div class="vfx-tooltip-trigger" title="${sanitizeHTML(PARAM_INFO_TOOLTIPS.enableAudioPrompting)}">${createIconSpanHTML("info", "default", "vfx-icon-small vfx-icon-info")}</div>
                         </div>
-                        ${createSelectFieldHTML("footer-numberOfPrompts", "Outputs per prompt", state.promptParams.numberOfPrompts, VEO_PROMPT_COUNT_OPTIONS_DISPLAY, VEO_PROMPT_COUNT_OPTIONS_VALUES, "", "lg:col-span-1")}
-                        ${createSelectFieldHTML("footer-style", "Visual Style", state.promptParams.style, VEO_STYLES, VEO_STYLES, "", "lg:col-span-1")}
-                        <div id="footer-sceneext-placeholder" class="lg:col-span-2 hidden lg:block"></div> <!-- Placeholder for grid alignment -->
+                        ${createSelectFieldHTML("footer-numberOfPrompts", "Outputs per prompt", state.promptParams.numberOfPrompts, VEO_PROMPT_COUNT_OPTIONS_DISPLAY, VEO_PROMPT_COUNT_OPTIONS_VALUES, "", "vfx-footer-select-group")}
+                        ${createSelectFieldHTML("footer-style", "Visual Style", state.promptParams.style, VEO_STYLES, VEO_STYLES, "", "vfx-footer-select-group")}
+                        <div id="footer-sceneext-placeholder" class="vfx-footer-placeholder"></div> <!-- Placeholder for grid alignment -->
 
-                        <div id="footer-buttons-group" class="flex space-x-1 sm:space-x-2 items-center lg:col-span-3 justify-end pt-2 md:pt-0 mt-2 md:mt-0 w-full">
-                            <button id="vfx-storyboard-btn" class="p-2 rounded-full text-gray-300 hover:text-white hover:bg-gray-700 hidden sm:inline-flex items-center justify-center shrink-0 disabled:opacity-50" aria-label="Create Storyboard from Concept" title="Prompt to Storyboard ✨">${createIconSpanHTML("view_carousel", "default", "w-5 h-5")}</button>
-                            <button id="vfx-char-gen-btn" class="p-2 rounded-full text-gray-300 hover:text-white hover:bg-gray-700 hidden sm:inline-flex items-center justify-center shrink-0 disabled:opacity-50" aria-label="Generate Character Details" title="Character Detail Generator ✨">${createIconSpanHTML("person", "default", "w-5 h-5")}</button>
-                            <button id="vfx-theme-explorer-btn" class="p-2 rounded-full text-gray-300 hover:text-white hover:bg-gray-700 hidden sm:inline-flex items-center justify-center shrink-0 disabled:opacity-50" aria-label="Explore thematic ideas" title="Theme Explorer ✨">${createIconSpanHTML("search", "default", "w-5 h-5")}</button>
-                            <button id="vfx-surprise-me-footer" class="p-2 rounded-full text-gray-300 hover:text-white hover:bg-gray-700 hidden sm:inline-flex items-center justify-center shrink-0 disabled:opacity-50" aria-label="Surprise me with a random concept" title="Surprise Me">${createIconSpanHTML("lightbulb", "default", "w-5 h-5")}</button>
-                            <button id="vfx-reset-all-btn" class="p-2 rounded-full text-gray-300 hover:text-white hover:bg-gray-700 inline-flex items-center justify-center shrink-0 disabled:opacity-50" aria-label="Reset all fields" title="Reset All Fields">${createIconSpanHTML("delete", "default", "w-5 h-5")}</button>
-                            <button id="vfx-advanced-settings-btn" class="p-2 rounded-full text-gray-300 hover:text-white hover:bg-gray-700 inline-flex items-center justify-center shrink-0 disabled:opacity-50" aria-label="Open advanced settings" title="Advanced Settings">${createIconSpanHTML("settings", "default", "w-5 h-5")}</button>
+                        <div id="footer-buttons-group" class="vfx-footer-buttons-group">
+                            <button id="vfx-storyboard-btn" class="vfx-button-icon vfx-button-icon-subtle" aria-label="Create Storyboard from Concept" title="Prompt to Storyboard ✨">${createIconSpanHTML("view_carousel", "default", "vfx-icon-medium")}</button>
+                            <button id="vfx-char-gen-btn" class="vfx-button-icon vfx-button-icon-subtle" aria-label="Generate Character Details" title="Character Detail Generator ✨">${createIconSpanHTML("person", "default", "vfx-icon-medium")}</button>
+                            <button id="vfx-theme-explorer-btn" class="vfx-button-icon vfx-button-icon-subtle" aria-label="Explore thematic ideas" title="Theme Explorer ✨">${createIconSpanHTML("search", "default", "vfx-icon-medium")}</button>
+                            <button id="vfx-surprise-me-footer" class="vfx-button-icon vfx-button-icon-subtle" aria-label="Surprise me with a random concept" title="Surprise Me">${createIconSpanHTML("lightbulb", "default", "vfx-icon-medium")}</button>
+                            <button id="vfx-prompt-history-btn" class="vfx-button-icon vfx-button-icon-subtle" aria-label="Prompt History" title="Prompt History">${createIconSpanHTML("history", "default", "vfx-icon-medium")}</button>
+                            <button id="vfx-reset-all-btn" class="vfx-button-icon vfx-button-icon-subtle" aria-label="Reset all fields" title="Reset All Fields">${createIconSpanHTML("delete", "default", "vfx-icon-medium")}</button>
+                            <button id="vfx-advanced-settings-btn" class="vfx-button-icon vfx-button-icon-subtle" aria-label="Open advanced settings" title="Advanced Settings">${createIconSpanHTML("settings", "default", "vfx-icon-medium")}</button>
                         </div>
                     </div>
-                     <div class="flex items-end space-x-2 sm:space-x-3 mt-3">
-                        <input type="file" id="vfx-file-input" accept="${ALLOWED_IMAGE_TYPES.join(',')}" class="hidden" aria-hidden="true" />
-                        <button id="vfx-upload-image-btn" class="p-2 rounded-full text-gray-300 hover:text-white hover:bg-gray-700 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed" aria-label="Upload image reference" title="${sanitizeHTML(PARAM_INFO_TOOLTIPS.imageInput)}">${createIconSpanHTML("attachment", "default", "w-5 h-5")}</button>
-                        <div class="flex-grow relative">
-                            <textarea id="vfx-main-textarea" placeholder="Describe your vision... e.g., 'A majestic lion surveying the savanna at dawn'" rows="1" class="w-full p-3 pr-10 bg-gray-900 border border-gray-700 rounded-md text-base leading-tight resize-none overflow-y-auto custom-scrollbar" style="max-height: 150px; min-height: 52px;" aria-label="Main prompt description"></textarea>
-                            <button id="vfx-clear-prompt-btn" class="absolute right-2.5 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 hover:text-white" aria-label="Clear prompt text and image" title="Clear Text & Image" style="display:none;">${createIconSpanHTML("close", "default", "w-5 h-5")}</button>
+                     <div class="vfx-main-input-area">
+                        <input type="file" id="vfx-file-input" accept="${ALLOWED_IMAGE_TYPES.join(',')}" class="vfx-file-input-hidden" aria-hidden="true" />
+                        <button id="vfx-upload-image-btn" class="vfx-button-icon vfx-button-icon-subtle" aria-label="Upload image reference" title="${sanitizeHTML(PARAM_INFO_TOOLTIPS.imageInput)}">${createIconSpanHTML("attachment", "default", "vfx-icon-medium")}</button>
+                        <div class="vfx-textarea-wrapper">
+                            <textarea id="vfx-main-textarea" placeholder="Describe your vision... e.g., 'A majestic lion surveying the savanna at dawn'" rows="1" class="vfx-textarea" aria-label="Main prompt description"></textarea>
+                            <button id="vfx-clear-prompt-btn" class="vfx-button-icon vfx-button-icon-clear-textarea" aria-label="Clear prompt text and image" title="Clear Text & Image" style="display:none;">${createIconSpanHTML("close", "default", "vfx-icon-medium")}</button>
                         </div>
-                        <button id="vfx-generate-btn" class="p-3 bg-purple-600 text-white inline-flex items-center justify-center shrink-0 rounded-lg text-base font-medium transition-transform transform hover:scale-105 hover:bg-purple-700 focus:outline-none" style="min-height: 52px;" aria-label="Generate"></button>
+                        <button id="vfx-generate-btn" class="vfx-button vfx-button-primary vfx-button-large vfx-generate-button" aria-label="Generate"></button>
                     </div>
                 </div>
             </div>
 
             <!-- General Modal Container -->
-            <div id="vfx-general-modal-container" class="fixed z-[10000] flex items-center justify-center p-4 animate-fadeIn" style="display:none; pointer-events: none;" @click.self="closeModal">
+            <div id="vfx-general-modal-container" class="vfx-modal-backdrop" style="display:none;" @click.self="closeModal">
                 <!-- Modal content will be injected here by renderActiveModal -->
             </div>
         `;
@@ -2626,6 +2873,8 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         footerThemeExplorerButton.addEventListener('click', () => openModal('themeExplorer'));
         footerCharGenButton.addEventListener('click', () => openModal('characterGen'));
         footerStoryboardButton.addEventListener('click', () => openModal('storyboard'));
+        overlayContainer.querySelector('#vfx-prompt-history-btn')?.addEventListener('click', () => openModal('promptHistory'));
+
 
         // Inspiration cards
         overlayContainer.querySelectorAll('.inspiration-card').forEach(card => {
@@ -2657,6 +2906,7 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         
         // Load saved window state
         windowState = loadWindowState();
+        loadPromptHistory(); // Load prompt history
         
         createOverlayUI();
         createToggleButton(); // Creates the button to show/hide the overlay
@@ -2675,224 +2925,286 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
 
         // MOVED GM_addStyle CALLS INSIDE THE IIFE, specifically at the end of init()
           // --- CSS Styles (GM_addStyle) ---
+        // The main CSS block with vfx-* classes has been added earlier.
+        // This section is for Tailwind-like utilities and specific overrides if needed.
+        // Most of the old Tailwind classes should be removed or replaced by vfx-* classes.
         GM_addStyle(`
-            #${OVERLAY_ID} {
-                font-family: 'Google Sans Text', 'Google Sans', 'Space Grotesk', sans-serif;
-                background-color: #121212;
-                color: hsl(200, 12%, 95.1%);
-                -webkit-font-smoothing: antialiased;
-                -moz-osx-font-smoothing: grayscale;
-                overflow: hidden;
-            }
-            #${OVERLAY_ID} .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
-            #${OVERLAY_ID} .custom-scrollbar::-webkit-scrollbar-track { background: hsla(0, 0%, 100%, 0.05); border-radius:4px; }
-            #${OVERLAY_ID} .custom-scrollbar::-webkit-scrollbar-thumb { background: hsla(0, 0%, 100%, 0.2); border-radius: 4px; }
-            #${OVERLAY_ID} .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: hsla(0, 0%, 100%, 0.3); }
-            #${OVERLAY_ID} @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-            #${OVERLAY_ID} .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
-            #${OVERLAY_ID} @keyframes popIn { 0% { opacity: 0; transform: scale(0.95) translateY(10px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
-            #${OVERLAY_ID} .animate-popIn { animation: popIn 0.3s ease-out forwards; }
+            /* Tailwind-like utility classes (subset) - RETAINED FOR NOW, but should be phased out */
+            /* Most of these should be covered by specific vfx-* component styles or default browser behaviors. */
+            /* #${OVERLAY_ID} .fixed { position: fixed; } */ /* Covered by #${OVERLAY_ID} styling */
+            /* #${OVERLAY_ID} .inset-0 { top: 0; right: 0; bottom: 0; left: 0; } */ /* Likely for full-screen modal backdrops, handled by .vfx-modal-backdrop */
+            /* #${OVERLAY_ID} .flex { display: flex; } */ /* Handled by components */
+            /* #${OVERLAY_ID} .flex-col { flex-direction: column; } */ /* Handled by components */
+            /* #${OVERLAY_ID} .items-center { align-items: center; } */ /* Handled by components */
+            /* #${OVERLAY_ID} .justify-center { justify-content: center; } */ /* Handled by components */
+            /* #${OVERLAY_ID} .overflow-hidden { overflow: hidden; } */ /* Handled by components like #${OVERLAY_ID} or .vfx-card */
+            /* #${OVERLAY_ID} .sticky { position: sticky; } */ /* Used by .vfx-header, .vfx-footer */
+            /* #${OVERLAY_ID} .top-0 { top: 0; } */ /* Used by .vfx-header */
+            /* #${OVERLAY_ID} .bottom-0 { bottom: 0; } */ /* Used by .vfx-footer */
+            /* #${OVERLAY_ID} .w-full { width: 100%; } */ /* Removed to encourage component-specific width or explicit utility like vfx-utility-w-full */
+            /* ... other minimal utilities if absolutely necessary ... */
 
-            #${OVERLAY_ID} .vpa-text-main { color: hsl(200, 12%, 95.1%); }
-            #${OVERLAY_ID} .vpa-text-subdued { color: hsla(0, 0%, 100%, 0.75); }
-            #${OVERLAY_ID} .vpa-text-faint { color: hsla(0, 0%, 100%, 0.55); }
-            #${OVERLAY_ID} .hover\\:vpa-text-main:hover { color: hsl(200, 12%, 95.1%); }
-
-            #${OVERLAY_ID} .studio-bg-base { background-color: #0f0f0f; }
-            #${OVERLAY_ID} .studio-bg-card-nested { background-color: #1a1a1a; }
-            #${OVERLAY_ID} .studio-bg-elevated { background-color: #1a1a1a; }
-            #${OVERLAY_ID} .studio-bg-elevated-hover:hover { background-color: #2a2a2a; }
-            #${OVERLAY_ID} .studio-border-soft { border-color: #333333; }
-            #${OVERLAY_ID} .studio-border-strong { border-color: #444444; }
-
-            #${OVERLAY_ID} .studio-icon-button { background-color: transparent; color: hsla(0, 0%, 100%, 0.75); border-radius: 9999px; padding: 0.625rem; transition: all 0.15s ease-in-out; display: inline-flex; align-items: center; justify-content: center; }
-            #${OVERLAY_ID} .studio-icon-button:hover { background-color: hsla(0, 0%, 100%, 0.1); color: hsl(200, 12%, 95.1%); }
-            #${OVERLAY_ID} .studio-icon-button:focus-visible { outline: 2px solid #7C3AED; outline-offset: 2px; }
-            #${OVERLAY_ID} .studio-icon-button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-            #${OVERLAY_ID} .studio-button-primary { background-color: #7C3AED; color: #FFFFFF; padding: 0.625rem 1.25rem; border-radius: 0.5rem; font-weight: 500; }
-            #${OVERLAY_ID} .studio-button-primary:hover { background-color: #6D28D9; }
-            #${OVERLAY_ID} .studio-button-primary:disabled { background-color: #553c7b; opacity: 0.6; cursor: not-allowed; }
-
-            #${OVERLAY_ID} .studio-button-secondary { background-color: hsla(0, 0%, 100%, 0.08); color: hsl(200, 12%, 95.1%); border: 1px solid hsla(0, 0%, 100%, 0.15); padding: 0.5rem 1rem; border-radius: 0.375rem; font-weight: 500;}
-            #${OVERLAY_ID} .studio-button-secondary:hover { background-color: hsla(0, 0%, 100%, 0.12); border-color: hsla(0, 0%, 100%, 0.25); }
-            #${OVERLAY_ID} .studio-button-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-            #${OVERLAY_ID} .studio-input-base { background-color: #111827; border: 1px solid #374151; color: hsl(200, 12%, 95.1%); border-radius: 0.375rem; padding: 0.625rem; width: 100%; }
-            #${OVERLAY_ID} .studio-input-base:focus { border-color: #7C3AED; outline: none; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.3); }
-
-            #${OVERLAY_ID} select.studio-input-base { appearance: none; -webkit-appearance: none; -moz-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239CA3AF' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 1.25em; padding-right: 2.5rem; }
-            #${OVERLAY_ID} select.studio-input-base option { background-color: #2d3748; color: hsl(200, 12%, 95.1%); }
-
+            /* Specific Overrides or Adjustments - Post vfx-* system */
             #${OVERLAY_ID} .material-symbols-rounded.material-symbols-filled,
             #${OVERLAY_ID} .material-symbols-outlined.material-symbols-filled,
             #${OVERLAY_ID} .material-icons.material-symbols-filled {
-                font-variation-settings: 'FILL' 1;
+                font-variation-settings: 'FILL' 1; /* Ensure filled icons are actually filled */
             }
-            /* Tailwind-like utility classes (subset) - FIXED typos from # OVERLAY_ID} to #${OVERLAY_ID} */
-            #${OVERLAY_ID} .fixed { position: fixed; } #${OVERLAY_ID} .inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
-            #${OVERLAY_ID} .z-\\[9999\\] { z-index: 9999; } #${OVERLAY_ID} .z-\\[10000\\] { z-index: 10000; }
-            #${OVERLAY_ID} .flex { display: flex; } #${OVERLAY_ID} .flex-col { flex-direction: column; }
-            #${OVERLAY_ID} .items-center { align-items: center; } #${OVERLAY_ID} .justify-center { justify-content: center; }
-            #${OVERLAY_ID} .overflow-hidden { overflow: hidden; } #${OVERLAY_ID} .sticky { position: sticky; }
-            #${OVERLAY_ID} .top-0 { top: 0; } #${OVERLAY_ID} .bottom-0 { bottom: 0; }
-            #${OVERLAY_ID} .w-full { width: 100%; } #${OVERLAY_ID} .h-12 { height: 3rem; } #${OVERLAY_ID} .h-6 { height: 1.5rem; } #${OVERLAY_ID} .w-6 { width: 1.5rem; }
-            #${OVERLAY_ID} .h-5 { height: 1.25rem; } #${OVERLAY_ID} .w-5 { width: 1.25rem; } #${OVERLAY_ID} .h-4 { height: 1rem; } #${OVERLAY_ID} .w-4 { width: 1rem; }
-            #${OVERLAY_ID} .p-1 { padding: 0.25rem; } #${OVERLAY_ID} .p-1\\.5 { padding: 0.375rem; } #${OVERLAY_ID} .p-2 { padding: 0.5rem; } #${OVERLAY_ID} .p-3 { padding: 0.75rem; } #${OVERLAY_ID} .p-4 { padding: 1rem; }
-            #${OVERLAY_ID} .px-4 { padding-left: 1rem; padding-right: 1rem; } #${OVERLAY_ID} .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
-            #${OVERLAY_ID} .sm\\:px-6 { } @media (min-width: 640px) { #${OVERLAY_ID} .sm\\:px-6 { padding-left: 1.5rem; padding-right: 1.5rem; } }
-            #${OVERLAY_ID} .md\\:px-8 { } @media (min-width: 768px) { #${OVERLAY_ID} .md\\:px-8 { padding-left: 2rem; padding-right: 2rem; } }
-            #${OVERLAY_ID} .pt-4 { padding-top: 1rem; } #${OVERLAY_ID} .sm\\:pt-2 { } @media (min-width: 640px) { #${OVERLAY_ID} .sm\\:pt-2 { padding-top: 0.5rem; } }
-            #${OVERLAY_ID} .md\\:pt-4 { } @media (min-width: 768px) { #${OVERLAY_ID} .md\\:pt-4 { padding-top: 1rem; } }
-            #${OVERLAY_ID} .max-w-7xl { max-width: 80rem; } #${OVERLAY_ID} .max-w-4xl { max-width: 56rem; } #${OVERLAY_ID} .max-w-3xl { max-width: 48rem; }
-            #${OVERLAY_ID} .max-w-2xl { max-width: 42rem; } #${OVERLAY_ID} .max-w-lg { max-width: 32rem; } #${OVERLAY_ID} .max-w-md { max-width: 28rem; }
-            #${OVERLAY_ID} .mx-auto { margin-left: auto; margin-right: auto; }
-            #${OVERLAY_ID} .space-x-1 > :not([hidden]) ~ :not([hidden]) { margin-left: calc(0.25rem * calc(1 - 0)); margin-right: calc(0.25rem * 0); }
-            #${OVERLAY_ID} .space-x-2 > :not([hidden]) ~ :not([hidden]) { margin-left: calc(0.5rem * calc(1 - 0)); margin-right: calc(0.5rem * 0); }
-            #${OVERLAY_ID} .sm\\:space-x-2 > :not([hidden]) ~ :not([hidden]) { } @media (min-width: 640px) { #${OVERLAY_ID} .sm\\:space-x-2 > :not([hidden]) ~ :not([hidden]) { margin-left: calc(0.5rem * calc(1 - 0)); margin-right: calc(0.5rem * 0); } }
-            #${OVERLAY_ID} .space-x-3 > :not([hidden]) ~ :not([hidden]) { margin-left: calc(0.75rem * calc(1 - 0)); margin-right: calc(0.75rem * 0); }
-            #${OVERLAY_ID} .space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(0.75rem * calc(1 - 0)); margin-bottom: calc(0.75rem * 0); }
-            #${OVERLAY_ID} .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(1rem * calc(1 - 0)); margin-bottom: calc(1rem * 0); }
-            #${OVERLAY_ID} .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(1.5rem * calc(1 - 0)); margin-bottom: calc(1.5rem * 0); }
-            #${OVERLAY_ID} .space-y-12 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(3rem * calc(1 - 0)); margin-bottom: calc(3rem * 0); }
-            #${OVERLAY_ID} .border-b { border-bottom-width: 1px; } #${OVERLAY_ID} .border-t { border-top-width: 1px; } #${OVERLAY_ID} .border { border-width: 1px; }
-            #${OVERLAY_ID} .rounded-lg { border-radius: 0.5rem; } #${OVERLAY_ID} .rounded-xl { border-radius: 0.75rem; } #${OVERLAY_ID} .rounded-md { border-radius: 0.375rem; } #${OVERLAY_ID} .rounded-full { border-radius: 9999px; } #${OVERLAY_ID} .rounded { border-radius: 0.25rem; }
-            #${OVERLAY_ID} .shadow-md { box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); }
-            #${OVERLAY_ID} .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }
-            #${OVERLAY_ID} .shadow-xl { box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); }
-            #${OVERLAY_ID} .shadow-inner { box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.06); }
-            #${OVERLAY_ID} .text-lg { font-size: 1.125rem; line-height: 1.75rem; } #${OVERLAY_ID} .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
-            #${OVERLAY_ID} .text-xs { font-size: 0.75rem; line-height: 1rem; } #${OVERLAY_ID} .text-base { font-size: 1rem; line-height: 1.5rem; }
-            #${OVERLAY_ID} .text-3xl { font-size: 1.875rem; line-height: 2.25rem; } #${OVERLAY_ID} .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
-            #${OVERLAY_ID} .font-medium { font-weight: 500; } #${OVERLAY_ID} .font-semibold { font-weight: 600; } #${OVERLAY_ID} .font-normal { font-weight: 400; }
-            #${OVERLAY_ID} .hidden { display: none; } #${OVERLAY_ID} .sm\\:block { } @media (min-width: 640px) { #${OVERLAY_ID} .sm\\:block { display: block; } }
-            #${OVERLAY_ID} .sm\\:inline { } @media (min-width: 640px) { #${OVERLAY_ID} .sm\\:inline { display: inline; } }
-            #${OVERLAY_ID} .sm\\:inline-flex { } @media (min-width: 640px) { #${OVERLAY_ID} .sm\\:inline-flex { display: inline-flex; } }
-            #${OVERLAY_ID} .opacity-90 { opacity: 0.9; } #${OVERLAY_ID} .opacity-75 { opacity: 0.75; }
-            #${OVERLAY_ID} .text-purple-500 { color: #8B5CF6; } #${OVERLAY_ID} .text-purple-400 { color: #A78BFA; } #${OVERLAY_ID} .text-purple-300 { color: #C4B5FD; }
-            #${OVERLAY_ID} .text-yellow-400 { color: #FACC15; } #${OVERLAY_ID} .text-green-400 { color: #4ADE80; }
-            #${OVERLAY_ID} .text-red-100 { color: #FEE2E2; } #${OVERLAY_ID} .text-red-200 { color: #FECACA; }
-            #${OVERLAY_ID} .bg-slate-700 { background-color: #334155; } #${OVERLAY_ID} .hover\\:bg-slate-600:hover { background-color: #475569; }
-            #${OVERLAY_ID} .text-slate-300 { color: #CBD5E1; } #${OVERLAY_ID} .hover\\:text-white:hover { color: #FFFFFF; }
-            #${OVERLAY_ID} .bg-purple-600 { background-color: #7C3AED; } #${OVERLAY_ID} .hover\\:bg-purple-700:hover { background-color: #6D28D9; }
-            #${OVERLAY_ID} .border-purple-600 { border-color: #7C3AED; }
-            #${OVERLAY_ID} .text-white { color: #FFFFFF; } #${OVERLAY_ID} .bg-black { background-color: #000000; }
-            #${OVERLAY_ID} .bg-opacity-50 { background-color: rgba(0,0,0,0.5); } #${OVERLAY_ID} .bg-opacity-80 { background-color: rgba(0,0,0,0.8); }
-            #${OVERLAY_ID} .backdrop-blur-md { backdrop-filter: blur(12px); } #${OVERLAY_ID} .backdrop-blur-sm { backdrop-filter: blur(4px); }
-            #${OVERLAY_ID} .flex-1 { flex: 1 1 0%; } #${OVERLAY_ID} .flex-grow { flex-grow: 1; } #${OVERLAY_ID} .shrink-0 { flex-shrink: 0; }
-            #${OVERLAY_ID} .focus\\:outline-none:focus { outline: 2px solid transparent; outline-offset: 2px; }
-            #${OVERLAY_ID} .focus\\:ring-2:focus { --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color); --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color); box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000); }
-            #${OVERLAY_ID} .focus\\:ring-purple-500:focus { --tw-ring-color: #8B5CF6; }
-            #${OVERLAY_ID} .focus\\:ring-opacity-75:focus { --tw-ring-opacity: 0.75; }
-            #${OVERLAY_ID} .focus\\:ring-offset-2:focus { --tw-ring-offset-width: 2px; }
-            #${OVERLAY_ID} .focus\\:ring-offset-gray-800:focus { --tw-ring-offset-color: #1F2937; }
-            #${OVERLAY_ID} .focus\\:ring-offset-black:focus { --tw-ring-offset-color: #000000; }
-            #${OVERLAY_ID} .focus\\:border-purple-500:focus { border-color: #8B5CF6; }
-            #${OVERLAY_ID} .transition-all { transition-property: all; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
-            #${OVERLAY_ID} .transition-colors { transition-property: background-color, border-color, color, fill, stroke; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
-            #${OVERLAY_ID} .transition-transform { transition-property: transform; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
-            #${OVERLAY_ID} .duration-150 { transition-duration: 150ms; } #${OVERLAY_ID} .duration-200 { transition-duration: 200ms; }
-            #${OVERLAY_ID} .ease-in-out { transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
-            #${OVERLAY_ID} .transform { transform: translateX(0) translateY(0) rotate(0) skewX(0) skewY(0) scaleX(1) scaleY(1); }
-            #${OVERLAY_ID} .hover\\:scale-105:hover { --tw-scale-x: 1.05; --tw-scale-y: 1.05; transform: translateX(0) translateY(0) rotate(0) skewX(0) skewY(0) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y)); }
-            #${OVERLAY_ID} .hover\\:-translate-y-1:hover { --tw-translate-y: -0.25rem; transform: translateX(0) translateY(var(--tw-translate-y)) rotate(0) skewX(0) skewY(0) scaleX(1) scaleY(1); }
-            #${OVERLAY_ID} .translate-x-6 { --tw-translate-x: 1.5rem; transform: translateX(var(--tw-translate-x)) translateY(0) rotate(0) skewX(0) skewY(0) scaleX(1) scaleY(1); }
-            #${OVERLAY_ID} .translate-x-1 { --tw-translate-x: 0.25rem; transform: translateX(var(--tw-translate-x)) translateY(0) rotate(0) skewX(0) skewY(0) scaleX(1) scaleY(1); }
-            #${OVERLAY_ID} .group:hover .group-hover\\:translate-x-1 { --tw-translate-x: 0.25rem; transform: translateX(var(--tw-translate-x)) translateY(0) rotate(0) skewX(0) skewY(0) scaleX(1) scaleY(1); }
-            #${OVERLAY_ID} .absolute { position: absolute; } #${OVERLAY_ID} .relative { position: relative; }
-            #${OVERLAY_ID} .right-2\\.5 { right: 0.625rem; } #${OVERLAY_ID} .top-1\\/2 { top: 50%; }
-            #${OVERLAY_ID} .-translate-y-1\\/2 { --tw-translate-y: -50%; transform: translateX(0) translateY(var(--tw-translate-y)) rotate(0) skewX(0) skewY(0) scaleX(1) scaleY(1); }
-            #${OVERLAY_ID} .text-center { text-align: center; } #${OVERLAY_ID} .text-left { text-align: left; }
-            #${OVERLAY_ID} .leading-tight { line-height: 1.25; } #${OVERLAY_ID} .leading-relaxed { line-height: 1.625; }
-            #${OVERLAY_ID} .resize-none { resize: none; } #${OVERLAY_ID} .resize-y { resize: vertical; }
-            #${OVERLAY_ID} .overflow-y-auto { overflow-y: auto; }
-            #${OVERLAY_ID} .object-cover { object-fit: cover; } #${OVERLAY_ID} .object-contain { object-fit: contain; }
-            #${OVERLAY_ID} .mr-3 { margin-right: 0.75rem; } #${OVERLAY_ID} .ml-2 { margin-left: 0.5rem; } #${OVERLAY_ID} .mr-2 { margin-right: 0.5rem; }
-            #${OVERLAY_ID} .mr-2\\.5 { margin-right: 0.625rem; }
-            #${OVERLAY_ID} .mb-1 { margin-bottom: 0.25rem; } #${OVERLAY_ID} .mb-2 { margin-bottom: 0.5rem; } #${OVERLAY_ID} .mb-3 { margin-bottom: 0.75rem; }
-            #${OVERLAY_ID} .mb-4 { margin-bottom: 1rem; } #${OVERLAY_ID} .mb-5 { margin-bottom: 1.25rem; } #${OVERLAY_ID} .mb-6 { margin-bottom: 1.5rem; } #${OVERLAY_ID} .mb-8 { margin-bottom: 2rem; }
-            #${OVERLAY_ID} .mt-2 { margin-top: 0.5rem; } #${OVERLAY_ID} .mt-3 { margin-top: 0.75rem; } #${OVERLAY_ID} .mt-4 { margin-top: 1rem; }
-            #${OVERLAY_ID} .md\\:col-span-2 { } @media (min-width: 768px) { #${OVERLAY_ID} .md\\:col-span-2 { grid-column: span 2 / span 2; } }
-            #${OVERLAY_ID} .lg\\:col-span-1 { } @media (min-width: 1024px) { #${OVERLAY_ID} .lg\\:col-span-1 { grid-column: span 1 / span 1; } }
-            #${OVERLAY_ID} .lg\\:col-span-3 { } @media (min-width: 1024px) { #${OVERLAY_ID} .lg\\:col-span-3 { grid-column: span 3 / span 3; } }
-            #${OVERLAY_ID} .md\\:col-start-1 { } @media (min-width: 768px) { #${OVERLAY_ID} .md\\:col-start-1 { grid-column-start: 1; } }
-            #${OVERLAY_ID} .lg\\:col-start-1 { } @media (min-width: 1024px) { #${OVERLAY_ID} .lg\\:col-start-1 { grid-column-start: 1; } }
-            #${OVERLAY_ID} .grid { display: grid; } #${OVERLAY_ID} .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
-            #${OVERLAY_ID} .md\\:grid-cols-2 { } @media (min-width: 768px) { #${OVERLAY_ID} .md\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-            #${OVERLAY_ID} .lg\\:grid-cols-3 { } @media (min-width: 1024px) { #${OVERLAY_ID} .lg\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-            #${OVERLAY_ID} .gap-4 { gap: 1rem; } #${OVERLAY_ID} .gap-x-4 { column-gap: 1rem; } #${OVERLAY_ID} .gap-y-3 { row-gap: 0.75rem; }
-            #${OVERLAY_ID} .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
-            #${OVERLAY_ID} .md\\:pt-0 { } @media (min-width: 768px) { #${OVERLAY_ID} .md\\:pt-0 { padding-top: 0px; } }
-            #${OVERLAY_ID} .justify-end { justify-content: flex-end; }
-            #${OVERLAY_ID} .self-start { align-self: flex-start; }
-            #${OVERLAY_ID} .line-clamp-3 { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-            #${OVERLAY_ID} .break-words { overflow-wrap: break-word; } #${OVERLAY_ID} .whitespace-pre-wrap { white-space: pre-wrap; }
-            #${OVERLAY_ID} .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-            #${OVERLAY_ID} .cursor-pointer { cursor: pointer; } #${OVERLAY_ID} .cursor-help { cursor: help; } #${OVERLAY_ID} .cursor-not-allowed { cursor: not-allowed; }
-            #${OVERLAY_ID} .select-none { user-select: none; }
-            #${OVERLAY_ID} .max-h-\\[90vh\\] { max-height: 90vh; } #${OVERLAY_ID} .max-h-\\[60vh\\] { max-height: 60vh; } #${OVERLAY_ID} .max-h-\\[50vh\\] { max-height: 50vh; } #${OVERLAY_ID} .max-h-40 { max-height: 10rem; } #${OVERLAY_ID} .max-h-32 { max-height: 8rem; }
-            #${OVERLAY_ID} .pr-2 { padding-right: 0.5rem; }
-            #${OVERLAY_ID} .list-disc { list-style-type: disc; } #${OVERLAY_ID} .list-inside { list-style-position: inside; } #${OVERLAY_ID} .pl-1 { padding-left: 0.25rem; } #${OVERLAY_ID} .pl-2 { padding-left: 0.5rem; }
-            #${OVERLAY_ID} .hover\\:bg-orange-600:hover { background-color: #EA580C; }
-            #${OVERLAY_ID} .hover\\:bg-sky-600:hover { background-color: #0284C7; }
-            #${OVERLAY_ID} .hover\\:bg-pink-600:hover { background-color: #DB2777; }
-            #${OVERLAY_ID} .hover\\:bg-lime-600:hover { background-color: #65A30D; }
-            #${OVERLAY_ID} .hover\\:bg-teal-600:hover { background-color: #0D9488; }
-            #${OVERLAY_ID} .hover\\:bg-blue-600:hover { background-color: #2563EB; }
-            #${OVERLAY_ID} .hover\\:bg-green-500:hover { background-color: #22C55E; }
-            #${OVERLAY_ID} .hover\\:bg-red-500:hover { background-color: #EF4444; }
-            #${OVERLAY_ID} .hover\\:bg-green-700:hover { background-color: #15803D; }
-            #${OVERLAY_ID} .hover\\:border-green-600:hover { border-color: #16A34A; }
-            #${OVERLAY_ID} .hover\\:border-purple-600:hover { border-color: #7C3AED; }
-            #${OVERLAY_ID} .bg-green-600 { background-color: #16A34A; }
-            #${OVERLAY_ID} .bg-red-600 { background-color: #DC2626; }
-            #${OVERLAY_ID} .bg-red-700 { background-color: #B91C1C; }
-            #${OVERLAY_ID} .bg-opacity-20 { background-color: rgba(var(--tw-bg-opacity-base,0),var(--tw-bg-opacity-base,0),var(--tw-bg-opacity-base,0),0.2); } /* Needs color vars for actual color */
-            #${OVERLAY_ID} .bg-red-700.bg-opacity-20 { background-color: rgba(185,28,28,0.2); } /* Specific example */
-            #${OVERLAY_ID} .bg-blue-700.bg-opacity-20 { background-color: rgba(29,78,216,0.2); }
-            #${OVERLAY_ID} .text-red-200 { color: #FECACA; }
-            #${OVERLAY_ID} .text-blue-200 { color: #BFDBFE; }
-            #${OVERLAY_ID} .border-red-600 { border-color: #DC2626; }
-            #${OVERLAY_ID} .hover\\:bg-purple-500\\/10:hover { background-color: rgba(168, 85, 247, 0.1); }
-            #${OVERLAY_ID} .italic { font-style: italic; }
-            #${OVERLAY_ID} .animate-spin { animation: spin 1s linear infinite; }
-            #${OVERLAY_ID} @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-           /* Info Tooltip Specific styling (can be enhanced) */
-            #${OVERLAY_ID} .info-tooltip-trigger { display: inline-flex; }
+           /* Info Tooltip Trigger specific styling */
+            #${OVERLAY_ID} .vfx-tooltip-trigger {
+                display: inline-flex; /* Aligns icon properly with text */
+                cursor: help;
+            }
+            /* .vfx-icon-info is already styled by vfx-icon-* and color var(--vfx-text-faint) */
+
+
+            /* Styling for main toggle button */
             #${TOGGLE_BUTTON_ID} {
+              /* Base styles are vfx-button, vfx-button-primary, vfx-button-float */
               position: fixed;
-              bottom: 20px;
-              right: 20px;
-              z-index: 99999; /* Ensure it's above other page content and the overlay */
-              padding: 0.75rem;
-              background-color: #1F2937; /* studio-bg-elevated or similar dark */
-              border: 1px solid #7C3AED; /* studio-border-strong with accent */
-              border-radius: 9999px; /* full */
-              box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-              cursor: pointer;
-              transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+              bottom: var(--vfx-spacing-large);
+              right: var(--vfx-spacing-large);
+              z-index: 100000; /* Highest z-index */
             }
-            #${TOGGLE_BUTTON_ID}:hover {
-              background-color: #374151; /* Slightly lighter dark */
-              transform: scale(1.1);
+            #${TOGGLE_BUTTON_ID}.vfx-button-active {
+                background-color: var(--vfx-secondary-accent-color); /* Example for active state */
             }
-            #${TOGGLE_BUTTON_ID} > svg { /* If icon is SVG */
-                width: 1.75rem; height: 1.75rem; fill: #A78BFA; /* text-purple-400 */
+            /* Icon color within TOGGLE_BUTTON_ID handled by .vfx-button styles */
+
+
+            /* Additional styles for specific VFX classes added during JS refactoring */
+
+            /* Notifications */
+            .vfx-notification {
+                position: fixed;
+                top: var(--vfx-spacing-large);
+                right: var(--vfx-spacing-large);
+                padding: var(--vfx-spacing-medium) var(--vfx-spacing-large);
+                border-radius: var(--vfx-border-radius-medium);
+                box-shadow: var(--vfx-shadow-large);
+                z-index: 100001; /* Above toggle button */
+                font-family: var(--vfx-font-family-sans);
+                font-size: var(--vfx-font-size-small);
+                font-weight: var(--vfx-font-weight-medium);
+                max-width: 320px;
+                color: var(--vfx-text-on-accent); /* Default, can be overridden by type */
             }
-            #${TOGGLE_BUTTON_ID} > span { /* If icon is span */
-                font-size: 1.75rem; color: #A78BFA;
+            .vfx-notification-info {
+                background-color: var(--vfx-info-color);
+                color: var(--vfx-text-on-info, var(--vfx-text-on-accent));
             }
+            .vfx-notification-success {
+                background-color: var(--vfx-success-color);
+                color: var(--vfx-text-on-success, var(--vfx-text-on-accent));
+            }
+            .vfx-notification-warning {
+                background-color: var(--vfx-warning-color);
+                color: var(--vfx-text-on-warning, var(--vfx-text-dark)); /* Dark text on yellow often better */
+            }
+            .vfx-notification-error {
+                background-color: var(--vfx-error-color);
+                color: var(--vfx-text-on-error, var(--vfx-text-on-accent));
+            }
+
+            /* Form Groups & Layout */
+            .vfx-form-group { margin-bottom: var(--vfx-spacing-medium); }
+            .vfx-form-group-fullwidth { width: 100%; } /* Utility for full width form groups */
+            .vfx-label-container { display: flex; align-items: center; margin-bottom: var(--vfx-spacing-xsmall); }
+            .vfx-form-grid { display: grid; gap: var(--vfx-spacing-medium); }
+            .vfx-grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+            .vfx-grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .vfx-grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .vfx-grid-col-span-1 { grid-column: span 1 / span 1; }
+            .vfx-grid-col-span-2 { grid-column: span 2 / span 2; }
+            .vfx-grid-col-span-3 { grid-column: span 3 / span 3; }
+            .vfx-form-container { display: flex; flex-direction: column; gap: var(--vfx-spacing-large); }
+
+
+            /* Alerts */
+            .vfx-alert {
+                padding: var(--vfx-spacing-medium);
+                border-radius: var(--vfx-border-radius-medium);
+                border: 1px solid transparent;
+                margin-bottom: var(--vfx-spacing-medium);
+            }
+            .vfx-alert-title { font-weight: var(--vfx-font-weight-bold); margin-bottom: var(--vfx-spacing-xsmall); }
+            .vfx-alert-message { font-size: var(--vfx-font-size-small); }
+            .vfx-alert-info {
+                background-color: var(--vfx-info-bg-soft);
+                border-color: var(--vfx-info-border-soft);
+                color: var(--vfx-info-text-soft);
+            }
+            .vfx-alert-info .vfx-alert-title { color: var(--vfx-info-text-strong); }
+            .vfx-alert-error {
+                background-color: var(--vfx-error-bg-soft);
+                border-color: var(--vfx-error-border-soft);
+                color: var(--vfx-error-text-soft);
+            }
+            .vfx-alert-error .vfx-alert-title { color: var(--vfx-error-text-strong); }
+
+
+            /* Lists */
+            .vfx-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--vfx-spacing-small); }
+            .vfx-list-item { padding: var(--vfx-spacing-small); border-radius: var(--vfx-border-radius-small); }
+            .vfx-list-item.vfx-card-nested { /* Uses .vfx-card styles, padding might need adjustment if it's too much */ }
+            .vfx-list-item-interactive { cursor: pointer; transition: background-color var(--vfx-transition-duration); }
+            .vfx-list-item-interactive:hover { background-color: var(--vfx-background-hover); }
+            .vfx-list-disc { list-style-type: disc; padding-left: var(--vfx-spacing-large); } /* For traditional bullet points */
+            .vfx-list-small li { font-size: var(--vfx-font-size-xsmall); }
+            .vfx-list-item-text { margin-bottom: var(--vfx-spacing-xsmall); flex-grow: 1; /* Allow text to take space */ }
+            .vfx-list-item-actions { display: flex; justify-content: flex-end; gap: var(--vfx-spacing-small); margin-top: var(--vfx-spacing-small); flex-shrink: 0; /* Prevent shrinking */ }
+
+
+            /* Prompt Item Specifics */
+            .vfx-prompt-items-layout { display: flex; flex-direction: column; gap: var(--vfx-spacing-medium); }
+            .vfx-prompt-item { /* Uses .vfx-card */ display: flex; flex-direction: column; }
+            .vfx-prompt-item-edit-area { margin-bottom: var(--vfx-spacing-small); }
+            .vfx-prompt-edit-textarea { /* Uses .vfx-textarea */ min-height: 80px; }
+            .vfx-prompt-item-text { white-space: pre-wrap; word-break: break-word; margin-bottom: var(--vfx-spacing-medium); flex-grow: 1; text-align: left; }
+            .vfx-prompt-item-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--vfx-spacing-xsmall); align-items: center; margin-top: auto; /* Push actions to bottom */ }
+
+            /* Modal Specifics */
+            .vfx-modal-small { max-width: 400px; width: 90vw; }
+            .vfx-modal-medium { max-width: 600px; width: 90vw; }
+            .vfx-modal-large { max-width: 900px; width: 90vw; }
+            .vfx-loading-spinner-container { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--vfx-spacing-xlarge); min-height: 200px; }
+            .vfx-loading-message { margin-top: var(--vfx-spacing-medium); font-size: var(--vfx-font-size-small); }
+            .vfx-results-container { display: flex; flex-direction: column; gap: var(--vfx-spacing-medium); }
+            .vfx-modal-subheader {
+                font-size: var(--vfx-font-size-large); /* Increased size */
+                font-weight: var(--vfx-font-weight-semibold);
+                color: var(--vfx-text-accent);
+                margin-bottom: var(--vfx-spacing-medium); /* Increased margin */
+                padding-bottom: var(--vfx-spacing-small); /* Increased padding */
+                border-bottom: 1px solid var(--vfx-border-color-strong); /* Stronger border */
+            }
+            .vfx-results-paragraph { white-space: pre-wrap; font-size: var(--vfx-font-size-small); }
+            .vfx-results-list-container { max-height: 60vh; overflow-y: auto; padding-right: var(--vfx-spacing-small); } /* Uses vfx-scrollbar */
+            .vfx-result-category { margin-bottom: var(--vfx-spacing-medium); }
+            .vfx-category-title { font-weight: var(--vfx-font-weight-semibold); margin-bottom: var(--vfx-spacing-xsmall); font-size: var(--vfx-font-size-medium); color: var(--vfx-text-subdued); }
+            .vfx-modal-footer {
+                display: flex;
+                justify-content: flex-end;
+                gap: var(--vfx-spacing-medium);
+                padding-top: var(--vfx-spacing-large);
+                margin-top: var(--vfx-spacing-large);
+                border-top: 1px solid var(--vfx-border-color-strong);
+            }
+            .vfx-audio-description { margin-top: var(--vfx-spacing-xsmall); font-style: italic; }
+            .vfx-key-elements { margin-top: var(--vfx-spacing-xsmall); }
+            .vfx-image-preview-large img { max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: var(--vfx-border-radius-medium); margin: 0 auto; display: block; }
+
+
+            /* Button Icon Placement */
+            .vfx-button-icon-left > .vfx-icon { margin-right: var(--vfx-spacing-small); }
+            .vfx-button-icon-right > .vfx-icon { margin-left: var(--vfx-spacing-small); }
+
+
+            /* Animations (ensure these are defined) */
+            @keyframes vfxFadeIn { from { opacity: 0; } to { opacity: 1; } }
+            .vfx-animate-fade-in { animation: vfxFadeIn var(--vfx-transition-duration-slow) ease-out forwards; }
+
+            @keyframes vfxPopIn {
+                0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+                100% { opacity: 1; transform: scale(1) translateY(0); }
+            }
+            .vfx-animate-pop-in { animation: vfxPopIn var(--vfx-transition-duration) ease-out forwards; }
+
+            @keyframes vfxSlideInRight {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            .vfx-animate-slide-in-right { animation: vfxSlideInRight var(--vfx-transition-duration) ease-out forwards; }
+
+            @keyframes vfxSlideOutRight {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+            .vfx-animate-slide-out-right { animation: vfxSlideOutRight var(--vfx-transition-duration) ease-out forwards; }
+
+            @keyframes vfxSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+            .vfx-animate-spin { animation: vfxSpin 1s linear infinite; }
+
+            /* Remove remaining Tailwind-like utility classes if they are fully replaced by vfx-* system */
+            /* e.g. .mr-2\\.5 is replaced by .vfx-button-icon-left > .vfx-icon margin or specific component styles */
+            /* Any remaining utilities should be reviewed and have a vfx-utility-* prefix or be removed. */
+
+            /* Styles for classes added in the last JS updates */
+            .vfx-image-preview-item {
+                display: flex;
+                align-items: center;
+                padding: var(--vfx-spacing-small);
+                background-color: var(--vfx-background-elevated); /* Or vfx-background-card-nested */
+                border-radius: var(--vfx-border-radius-medium);
+                border: 1px solid var(--vfx-border-color-soft);
+                margin-bottom: var(--vfx-spacing-medium); /* Space it from the input area below */
+            }
+            .vfx-image-preview-thumbnail {
+                width: 48px; /* Approx w-12 h-12 */
+                height: 48px;
+                object-fit: cover;
+                border-radius: var(--vfx-border-radius-small);
+                margin-right: var(--vfx-spacing-medium);
+            }
+            .vfx-image-preview-info {
+                flex-grow: 1;
+                font-size: var(--vfx-font-size-small); /* For the "MB Max" text */
+            }
+            .vfx-text-truncate {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .vfx-image-preview-clear-btn {
+                margin-left: var(--vfx-spacing-small);
+            }
+
+            .vfx-welcome-icon { /* Specific styling for the large icon on welcome screen */
+                margin-bottom: var(--vfx-spacing-large);
+                /* font-size: var(--vfx-icon-xlarge) handled by class, color by vfx-icon-accent */
+            }
+            .vfx-icon-cta-arrow { /* For inspiration card "Use Theme ->" */
+                transition: transform var(--vfx-transition-duration);
+                display: inline-block; /* Allows transform */
+            }
+            .vfx-inspiration-card:hover .vfx-icon-cta-arrow {
+                transform: translateX(3px);
+            }
+
+            .vfx-prompt-items-layout { /* Already defined as display:flex, flex-direction:column; gap: var(--vfx-spacing-medium); */
+                /* No additional styles needed if this is sufficient */
+            }
+            .vfx-footer-select-group { /* Wrapper for select elements in footer, part of a grid */
+                /* Grid properties are on vfx-footer-grid. This class is for potential specific styling if needed */
+            }
+            .vfx-footer-placeholder { /* Used for grid alignment, likely needs no visual style */
+                display: none; /* Typically hidden unless in certain layouts */
+            }
+            @media (min-width: 1024px) { /* lg breakpoint from original Tailwind */
+                .lg\\:block { display: block; } /* For footer-sceneext-placeholder */
+                 #footer-sceneext-placeholder.lg\\:col-span-2 { grid-column: span 2 / span 2; }
+            }
+
+
         `);
-        // Font imports
+        // Font imports (should be fine as they are global)
         GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Google+Sans+Text:wght@400;500;700&family=Google+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap');");
         GM_addStyle("@import url('https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Outlined|Material+Icons+Round|Material+Icons+Sharp|Material+Icons+Two+Tone');");
         GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');");
         GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');");
         
-        // Additional fixes for text color and alignment
+        // Additional fixes for text color and alignment - MOSTLY REMOVED/COMMENTED
         GM_addStyle(`
-            /* Fix text color in input fields */
+            /*
+                The following rules were previously !important overrides.
+                They are now commented out or removed as the vfx-* system should handle them.
+                If specific issues arise due to host page styles, targeted, non-!important
+                overrides might be necessary, but the goal is to rely on the vfx-* system's specificity.
+            */
+
+            /* Input and Textarea text color is handled by .vfx-input, .vfx-textarea color properties */
+            /*
             .vfx-floating-window input,
             .vfx-floating-window textarea,
             .vfx-floating-window select {
@@ -2900,20 +3212,27 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                 background-color: rgba(255, 255, 255, 0.1) !important;
                 border: 1px solid rgba(255, 255, 255, 0.2) !important;
             }
+            */
             
+            /* Placeholder color is handled by .vfx-input::placeholder, .vfx-textarea::placeholder */
+            /*
             .vfx-floating-window input::placeholder,
             .vfx-floating-window textarea::placeholder {
                 color: rgba(255, 255, 255, 0.6) !important;
             }
+            */
             
-            /* Remove any blur effects */
+            /* Blur and filter effects are not part of the new design. Pointer events are handled by base styles. */
+            /*
             .vfx-floating-window {
                 backdrop-filter: none !important;
                 filter: none !important;
                 pointer-events: auto !important;
             }
+            */
             
-            /* Ensure all interactive elements are clickable */
+            /* Pointer events for interactive elements should be default 'auto' or handled by vfx-button[disabled] */
+            /*
             .vfx-floating-window button,
             .vfx-floating-window input,
             .vfx-floating-window textarea,
@@ -2922,82 +3241,87 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                 pointer-events: auto !important;
                 cursor: pointer !important;
             }
+            */
             
-            /* Fix icon sizes to match reference */
-            .vfx-floating-window .w-12 {
-                width: 3rem !important;
-                height: 3rem !important;
-            }
+            /* Icon sizes are handled by vfx-icon-small, vfx-icon-medium, vfx-icon-large */
+            /*
+            .vfx-floating-window .w-12 { width: 3rem !important; height: 3rem !important; }
+            .vfx-floating-window .h-12 { height: 3rem !important; }
+            */
             
-            .vfx-floating-window .h-12 {
-                height: 3rem !important;
-            }
+            /* Flexbox utilities are largely replaced by component-specific flex rules or general layout classes like vfx-form-grid */
+            /*
+            .vfx-floating-window .flex { display: flex !important; }
+            .vfx-floating-window .items-center { align-items: center !important; }
+            .vfx-floating-window .justify-center { justify-content: center !important; }
+            */
             
-            /* Improve layout alignment */
-            .vfx-floating-window .flex {
-                display: flex !important;
-            }
-            
-            .vfx-floating-window .items-center {
-                align-items: center !important;
-            }
-            
-            .vfx-floating-window .justify-center {
-                justify-content: center !important;
-            }
-            
-            /* Fix button text colors */
+            /* Button text color is handled by .vfx-button and its variants */
+            /*
             .vfx-floating-window button {
                 color: inherit !important;
             }
+            */
             
-            /* Fix select dropdown text */
+            /* Select option styling is handled by .vfx-select option */
+            /*
             .vfx-floating-window select option {
                 background-color: #1f2937 !important;
                 color: #ffffff !important;
             }
+            */
             
-            /* Ensure clean, sharp appearance */
+            /* Global pointer-events and filter none is too broad and can have unintended side effects. */
+            /*
             .vfx-floating-window * {
                 filter: none !important;
                 backdrop-filter: none !important;
                 pointer-events: auto !important;
             }
+            */
             
-            /* Make sure the window content is interactive */
+            /* .vfx-window-content is not a defined class, pointer events handled by specific child elements */
+            /*
             .vfx-floating-window .vfx-window-content {
                 pointer-events: auto !important;
             }
+            */
             
-            /* Ensure buttons are properly styled and clickable */
+            /* Button hover opacity is handled by .vfx-button:hover definitions */
+            /*
             .vfx-floating-window button:hover {
                 opacity: 0.8 !important;
             }
+            */
             
-            /* Prevent any unwanted overlays */
+            /* Modal backdrop pointer events are handled by .vfx-modal-backdrop */
+            /*
             .vfx-floating-window #vfx-general-modal-container {
                 background: none !important;
                 backdrop-filter: none !important;
                 pointer-events: none !important;
             }
-            
-            /* Ensure modal content is clickable when shown */
             .vfx-floating-window #vfx-general-modal-container > * {
                 pointer-events: auto !important;
             }
+            */
             
-            /* Fix audio toggle visibility and styling */
+            /* Audio toggle display and alignment are handled by .vfx-audio-toggle-container and its flex properties */
+            /*
             .vfx-floating-window #footer-audio-toggle {
                 display: flex !important;
                 align-items: center !important;
                 visibility: visible !important;
             }
+            */
             
+            /* .vfx-toggle-switch (formerly #vfx-enable-audio-toggle) is styled by its own vfx-* classes */
+            /*
             .vfx-floating-window #vfx-enable-audio-toggle {
                 display: inline-flex !important;
                 visibility: visible !important;
                 opacity: 1 !important;
-                background-color: #4B5563 !important; /* Default gray background */
+                background-color: #4B5563 !important;
                 border: 1px solid rgba(255, 255, 255, 0.2) !important;
                 width: 44px !important;
                 height: 24px !important;
@@ -3005,144 +3329,21 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                 position: relative !important;
                 transition: background-color 0.2s ease !important;
             }
-            
-            .vfx-floating-window #vfx-enable-audio-toggle.bg-purple-600 {
-                background-color: #9333EA !important; /* Purple when enabled */
-            }
-            
-            .vfx-floating-window #vfx-enable-audio-toggle.bg-gray-600 {
-                background-color: #4B5563 !important; /* Gray when disabled */
-            }
-            
-            .vfx-floating-window #vfx-enable-audio-toggle span {
-                display: block !important;
-                width: 16px !important;
-                height: 16px !important;
-                background-color: #FFFFFF !important;
-                border-radius: 50% !important;
-                transition: transform 0.2s ease !important;
-                position: absolute !important;
-                top: 3px !important;
-                left: 4px !important;
-            }
-            
-            .vfx-floating-window #vfx-enable-audio-toggle span.translate-x-6 {
-                transform: translateX(20px) !important;
-            }
-            
-            .vfx-floating-window #vfx-enable-audio-toggle span.translate-x-1 {
-                transform: translateX(0px) !important;
-            }
-            
-            .vfx-floating-window #footer-audio-toggle label {
-                color: rgba(255, 255, 255, 0.8) !important;
-                display: inline !important;
-                visibility: visible !important;
-            }
-            
-            /* Improved scrolling and content layout */
-            .vfx-floating-window main {
-                overflow-y: auto !important;
-                max-height: calc(100% - 120px) !important; /* Account for header and footer */
-                scrollbar-width: thin !important;
-                scrollbar-color: rgba(255, 255, 255, 0.2) rgba(0, 0, 0, 0.2) !important;
-            }
-            
-            .vfx-floating-window main::-webkit-scrollbar {
-                width: 8px !important;
-            }
-            
-            .vfx-floating-window main::-webkit-scrollbar-track {
-                background: rgba(0, 0, 0, 0.2) !important;
-                border-radius: 4px !important;
-            }
-            
-            .vfx-floating-window main::-webkit-scrollbar-thumb {
-                background-color: rgba(255, 255, 255, 0.2) !important;
-                border-radius: 4px !important;
-            }
-            
-            /* Improved inspiration cards */
-            .vfx-floating-window .inspiration-card {
-                display: flex !important;
-                flex-direction: column !important;
-                height: auto !important;
-                min-height: 140px !important;
-                padding: 16px !important;
-                transition: all 0.2s ease !important;
-            }
-            
-            .vfx-floating-window .inspiration-card:hover {
-                transform: translateY(-4px) !important;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
-            }
-            
-            .vfx-floating-window .inspiration-card p {
-                overflow: hidden !important;
-                text-overflow: ellipsis !important;
-                display: -webkit-box !important;
-                -webkit-line-clamp: 4 !important; /* Show 4 lines instead of 3 */
-                -webkit-box-orient: vertical !important;
-                line-height: 1.4 !important;
-            }
-            
-            /* Resize handles styling */
-            .vfx-floating-window .resize-handle {
-                background-color: transparent !important;
-                transition: background-color 0.2s ease !important;
-            }
-            
-            .vfx-floating-window .resize-handle:hover {
-                background-color: rgba(147, 51, 234, 0.3) !important; /* Purple highlight on hover */
-            }
-            
-            /* Corner resize handles - visible dots */
-            .vfx-floating-window .resize-handle-ne,
-            .vfx-floating-window .resize-handle-nw,
-            .vfx-floating-window .resize-handle-se,
-            .vfx-floating-window .resize-handle-sw {
-                background-color: rgba(255, 255, 255, 0.1) !important;
-                border: 1px solid rgba(255, 255, 255, 0.2) !important;
-                border-radius: 2px !important;
-            }
-            
-            .vfx-floating-window .resize-handle-ne:hover,
-            .vfx-floating-window .resize-handle-nw:hover,
-            .vfx-floating-window .resize-handle-se:hover,
-            .vfx-floating-window .resize-handle-sw:hover {
-                background-color: rgba(147, 51, 234, 0.5) !important;
-                border-color: rgba(147, 51, 234, 0.8) !important;
-            }
-            
-            /* Edge resize handles - subtle lines */
-            .vfx-floating-window .resize-handle-n,
-            .vfx-floating-window .resize-handle-s {
-                background-color: rgba(255, 255, 255, 0.05) !important;
-                border-radius: 2px !important;
-            }
-            
-            .vfx-floating-window .resize-handle-e,
-            .vfx-floating-window .resize-handle-w {
-                background-color: rgba(255, 255, 255, 0.05) !important;
-                border-radius: 2px !important;
-            }
-            
-            /* Window control buttons improvements */
-            .vfx-floating-window .window-control-btn:hover {
-                transform: scale(1.1) !important;
-            }
+            */
         `);
      }
     // --- END: Main Initialization Function ---
-    
-    // Debug helper for testing audio prompting
+
+    // Debug helper for testing audio prompting (can be removed in production if not needed)
+    /*
     window.vfxAudioDebug = {
         getCurrentState: () => state.promptParams.enableAudioPrompting,
         toggleAudio: () => handleParamChange({ enableAudioPrompting: !state.promptParams.enableAudioPrompting }),
         testNotification: (msg, type = 'info') => showTemporaryNotification(msg, type),
-        getState: () => state
+        getState: () => state // Expose full state for debugging
     };
-    
+    */
+
     // Initialize the script
     init();
 })();
