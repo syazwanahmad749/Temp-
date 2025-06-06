@@ -1417,10 +1417,13 @@
         toggleButton.id = TOGGLE_BUTTON_ID;
         toggleButton.innerHTML = `<svg viewBox="0 0 24 24" style="width: 28px; height: 28px; max-width: 28px; max-height: 28px; color: #A78BFA;" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
         toggleButton.title = `${OVERLAY_TITLE} (v${SCRIPT_VERSION})`;
-        
+        toggleButton.setAttribute('aria-label', 'Toggle Veo Prompt Artisan');
+        toggleButton.setAttribute('aria-pressed', 'false');
+
         toggleButton.addEventListener('click', () => {
             windowState.isVisible = !windowState.isVisible;
             overlayContainer.style.display = windowState.isVisible ? 'flex' : 'none';
+            toggleButton.setAttribute('aria-pressed', String(windowState.isVisible));
             saveWindowState();
             
             if (windowState.isVisible) {
@@ -1441,9 +1444,18 @@
         // Create UI elements
         createToggleButton();
         createMainOverlay();
-        
+
         // Setup window resize handler
         addTrackedEventListener(window, 'resize', debouncedWindowResize);
+        // Allow closing the overlay with the Escape key
+        addTrackedEventListener(document, 'keydown', (e) => {
+            if (e.key === 'Escape' && windowState.isVisible) {
+                windowState.isVisible = false;
+                overlayContainer.style.display = 'none';
+                toggleButton.setAttribute('aria-pressed', 'false');
+                saveWindowState();
+            }
+        });
         
         console.log(`[VideoFX Artisan] Initialization complete v${SCRIPT_VERSION}`);
         showTemporaryNotification(`VideoFX Prompt Artisan v${SCRIPT_VERSION} loaded!`, 'success');
