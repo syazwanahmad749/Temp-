@@ -287,6 +287,39 @@
       { title: "Cyberpunk City Chase", concept: "A futuristic vehicle speeding through neon-lit cyberpunk city streets at night, rain-slicked roads, dynamic camera angles. Audio: Roaring engines, tire screeches, futuristic synthwave music, distant city hum.", params: { style: "Cyberpunk", cameraMovement: "Dynamic quick cuts", lighting: "Neon Glow" } }
     ];
 
+    // Define SCHEMA_INPUTS if it's not already defined (assuming a structure based on previous attempts)
+    const SCHEMA_INPUTS = {
+        "aspectRatio": { title: "Aspect Ratio", type: "enum", values: VEO_ASPECT_RATIOS_VALUES, display_values: VEO_ASPECT_RATIOS_DISPLAY, default: "", fullWidth: false, order: 1, tooltip: PARAM_INFO_TOOLTIPS.aspectRatio},
+        "durationHint": { title: "Duration Hint", type: "enum", values: VEO_DURATION_HINTS, display_values: VEO_DURATION_HINTS, default: "", fullWidth: false, order: 2, tooltip: PARAM_INFO_TOOLTIPS.durationHint },
+        // Example additional schema items - these would need to be fully defined elsewhere in a real scenario
+        "composition_rule": { title: "Composition Rule", type: "enum", values: ["", "Rule of Thirds", "Golden Ratio", "Symmetry"], default: "", order: 3, tooltip: "Guideline for visual composition." },
+        "shot_size": { title: "Shot Size", type: "enum", values: ["", "Establishing Shot", "Long Shot", "Medium Shot", "Close Up"], default: "", order: 4, tooltip: "Framing of the subject." },
+        "camera_angle": { title: "Camera Angle", type: "enum", values: VEO_CAMERA_ANGLES, default: "", order: 5, tooltip: PARAM_INFO_TOOLTIPS.cameraAngle },
+        "camera_movement": { title: "Camera Movement", type: "enum", values: VEO_CAMERA_MOVEMENTS, default: "", order: 6, tooltip: PARAM_INFO_TOOLTIPS.cameraMovement },
+        "lens_type_optical_effects": { title: "Lens & Optics", type: "string", placeholder: "e.g., Anamorphic, Fisheye, Lens flare", default: "", order: 7, fullWidth: true, tooltip: "Specify lens types or optical effects." },
+        "lighting_style_atmosphere": { title: "Lighting & Atmosphere", type: "string", placeholder: "e.g., Volumetric lighting, Moody, Hazy", default: "", order: 8, fullWidth: true, tooltip: PARAM_INFO_TOOLTIPS.lighting },
+        "visual_style_medium_era": { title: "Visual Style/Medium/Era", type: "string", placeholder: "e.g., Watercolor, 1970s film, Retro", default: "", order: 9, fullWidth: true, tooltip: "Overall visual aesthetic, artistic medium, or time period." },
+        "vfx_post_production": { title: "VFX/Post-Production", type: "string", placeholder: "e.g., Glitch effect, Slow motion, Light trails", default: "", order: 10, fullWidth: true, tooltip: "Visual effects or post-production techniques." },
+        "color_palette_grading": { title: "Color Palette/Grading", type: "string", placeholder: "e.g., Monochromatic, High contrast, Sepia", default: "", order: 11, fullWidth: true, tooltip: "Color treatment and grading." },
+        "editing_pace_transitions": { title: "Editing/Pacing/Transitions", type: "string", placeholder: "e.g., Fast cuts, Long take, Wipe transition", default: "", order: 12, fullWidth: true, tooltip: "Editing style, pacing, or transitions." },
+        "subject_prominence": { title: "Subject Prominence", type: "enum", values: ["", "Main focus", "Background element", "Integrated with environment"], default: "", order: 13, tooltip: "How prominent the main subject is." },
+        "custom_elements": { title: "Custom Keywords", type: "string", placeholder: "e.g., Ethereal, Gritty, Whimsical", default: "", order: 14, fullWidth: true, tooltip: "Add any other specific keywords." }
+    };
+
+    const ADVANCED_CONTROLS_GROUPS = [
+        { title: "Core Parameters", keys: ["aspectRatio", "durationHint"] },
+        { title: "Composition & Framing", keys: ["composition_rule", "shot_size"] },
+        { title: "Camera Work", keys: ["camera_angle", "camera_movement"] },
+        { title: "Lens & Optics", keys: ["lens_type_optical_effects"] },
+        { title: "Lighting & Atmosphere", keys: ["lighting_style_atmosphere"] },
+        { title: "Visual Style & Era", keys: ["visual_style_medium_era"] },
+        { title: "VFX & Post-Production", keys: ["vfx_post_production"] },
+        { title: "Color & Grading", keys: ["color_palette_grading"] },
+        { title: "Editing & Pacing", keys: ["editing_pace_transitions"] },
+        { title: "Subject Focus", keys: ["subject_prominence"] },
+        { title: "Custom Keywords", keys: ["custom_elements"] }
+    ];
+
     const PREAMBLE_CONFIG = {
         mainPromptGen: {
             audioOff: (numPrompts) => `You are an expert AI assistant, a "Veo 2 Prompt Artisan & Scene Annotator," specializing in crafting exceptionally detailed, creative, and effective prompts for Google's Veo 2 video generation model. Your capabilities are akin to a sophisticated system trained to annotate vast quantities of video and image data with rich, multi-layered textual descriptions. You understand how to translate a core idea, potentially augmented by a reference image, into a descriptive narrative that Veo 2 can optimally interpret to generate compelling video.
@@ -809,6 +842,10 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             description: '', style: "", aspectRatio: '', cameraAngle: '', cameraMovement: '', lighting: '', durationHint: '', negativePrompt: '',
             numberOfPrompts: VEO_PROMPT_COUNT_OPTIONS_VALUES[0], imageB64: null, imageMimeType: null,
             enableAudioPrompting: false,
+            advanced: {} // To store other advanced settings from SCHEMA_INPUTS
+        },
+        ui: { // UI specific state
+            advancedSettingsViewMode: 'basic', // 'basic' or 'advanced'
         },
         generatedPrompts: [],
         isLoading: false,
@@ -912,6 +949,41 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         });
     }
     // --- END: Utility Functions ---
+
+    // --- START: Helper function to check for active advanced settings ---
+    function areAdvancedSettingsActive() {
+        // Check top-level parameters like aspectRatio and durationHint
+        if (state.promptParams.aspectRatio !== (SCHEMA_INPUTS.aspectRatio?.default || VEO_ASPECT_RATIOS_VALUES[0] || "")) {
+            return true;
+        }
+        if (state.promptParams.durationHint !== (SCHEMA_INPUTS.durationHint?.default || VEO_DURATION_HINTS[0] || "")) {
+            return true;
+        }
+        // It seems negativePrompt is also a top-level param based on handleAdvancedSettingChange
+        if (state.promptParams.negativePrompt !== (SCHEMA_INPUTS.negativePrompt?.default || "")) {
+             // Assuming negativePrompt has a schema entry or defaults to ""
+            // return true; // Uncomment if negativePrompt should trigger indicator
+        }
+
+        // Check parameters stored in state.promptParams.advanced
+        if (state.promptParams.advanced) {
+            for (const group of ADVANCED_CONTROLS_GROUPS) {
+                for (const key of group.keys) {
+                    // Skip keys that are top-level in state.promptParams
+                    if (key === "aspectRatio" || key === "durationHint" || key === "negativePrompt") {
+                        continue;
+                    }
+                    const currentValue = state.promptParams.advanced[key];
+                    const defaultValue = SCHEMA_INPUTS[key]?.default || "";
+                    if (currentValue !== undefined && currentValue !== defaultValue) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+    // --- END: Helper function to check for active advanced settings ---
 
     // --- START: API Interaction Logic ---
     async function callArtisanApiInternal(apiActionKey, promptText, params = {}, featureSpecificData = {}) {
@@ -1222,6 +1294,14 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             }
         }
 
+        // Update Advanced Settings button indicator
+        if (footerAdvancedSettingsButton) {
+            if (areAdvancedSettingsActive()) {
+                footerAdvancedSettingsButton.classList.add('adv-settings-active-indicator');
+            } else {
+                footerAdvancedSettingsButton.classList.remove('adv-settings-active-indicator');
+            }
+        }
 
         renderActiveModal();
     }
@@ -1403,19 +1483,89 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
     function getModalBodyHTML(type, data, result) {
         switch (type) {
             case 'advancedSettings':
+                const BASIC_CONTROL_KEYS = ['aspectRatio', 'durationHint'];
+                const currentViewMode = state.ui.advancedSettingsViewMode || 'basic';
+
+                let viewModeToggleHTML = `
+                    <div class="flex justify-center space-x-2 mb-4 border-b studio-border-soft pb-3">
+                        <button id="adv-view-basic-btn" class="px-4 py-1.5 text-sm rounded-md ${currentViewMode === 'basic' ? 'studio-button-primary' : 'studio-button-secondary'}">Basic</button>
+                        <button id="adv-view-advanced-btn" class="px-4 py-1.5 text-sm rounded-md ${currentViewMode === 'advanced' ? 'studio-button-primary' : 'studio-button-secondary'}">Advanced</button>
+                    </div>
+                `;
+
+                let accordionHTML = '<div class="space-y-1 vfx-accordion-container">';
+                // Ensure UI.elements and advancedSettingsInputsMap are initialized
+                if (typeof UI === 'undefined') var UI = {}; // Define UI if not already defined (e.g. if script runs in strict isolation)
+                if (!UI.elements) UI.elements = {};
+                UI.elements.advancedSettingsInputsMap = {}; // Clear map each time modal is rendered
+
+                let visibleGroupCount = 0;
+                ADVANCED_CONTROLS_GROUPS.forEach((group, groupIndex) => {
+                    const groupHasBasicControls = group.keys.some(key => BASIC_CONTROL_KEYS.includes(key));
+                    const controlsToRender = currentViewMode === 'basic' ? group.keys.filter(key => BASIC_CONTROL_KEYS.includes(key)) : group.keys;
+
+                    if (currentViewMode === 'basic' && !groupHasBasicControls) {
+                        return; // Skip group if basic view and no basic controls in it
+                    }
+                    if (controlsToRender.length === 0) {
+                        return; // Skip group if no controls to render for the current view mode
+                    }
+                    visibleGroupCount++;
+
+                    const sectionId = `adv-group-${group.title.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+                    const isExpanded = visibleGroupCount === 1; // Expand first *visible* group
+                    let groupContentHTML = '<div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 p-3">';
+
+                    controlsToRender.forEach(key => {
+                        const inputId = `adv-input-${key}`;
+                        UI.elements.advancedSettingsInputsMap[key] = inputId;
+
+                        let currentValue;
+                        if (key === "aspectRatio") currentValue = state.promptParams.aspectRatio;
+                        else if (key === "durationHint") currentValue = state.promptParams.durationHint;
+                        else if (key === "negativePrompt") currentValue = state.promptParams.negativePrompt;
+                        else currentValue = state.promptParams.advanced?.[key] || SCHEMA_INPUTS[key]?.default || '';
+
+                        if (SCHEMA_INPUTS && SCHEMA_INPUTS[key]) {
+                            const schema = SCHEMA_INPUTS[key];
+                            const tooltip = schema.tooltip || schema.description || `Control for ${schema.title}`;
+                            if (schema.type === "enum" && schema.values) {
+                                groupContentHTML += createSelectFieldHTML(inputId, schema.title, currentValue, schema.display_values || schema.values, schema.values, tooltip, schema.fullWidth ? "md:col-span-2" : "");
+                            } else if (schema.type === "string") {
+                                groupContentHTML += createTextFieldHTML(inputId, schema.title, currentValue, schema.placeholder || "Enter value...", tooltip, schema.fullWidth ? "md:col-span-2" : "");
+                            }
+                        }
+                    });
+                    groupContentHTML += '</div>';
+
+                    if (groupContentHTML.includes('</div')) { // Only add section if it has content
+                        accordionHTML += `
+                            <div class="modal-accordion-section bg-gray-700/10 rounded">
+                                <div class="modal-accordion-header-temp flex justify-between items-center p-2.5 cursor-pointer hover:bg-gray-600/20 rounded-t"
+                                     aria-expanded="${isExpanded}" aria-controls="${sectionId}-content" tabindex="0">
+                                    <span class="text-sm font-medium vpa-text-subdued">${sanitizeHTML(group.title)}</span>
+                                    <span class="modal-accordion-icon text-sm vpa-text-faint">${isExpanded ? '[-]' : '[+]'}</span>
+                                </div>
+                                <div class="modal-accordion-content-temp p-0 ${isExpanded ? '' : 'hidden'}" id="${sectionId}-content" role="region">
+                                    ${groupContentHTML}
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+                accordionHTML += '</div>';
+
+                if (visibleGroupCount === 0 && currentViewMode === 'basic') {
+                    accordionHTML = `<p class="text-center vpa-text-subdued py-4">No basic controls available. Switch to Advanced view to see all options.</p>`;
+                }
+
                 return `
-                    <div class="space-y-6 p-1">
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            ${createSelectFieldHTML("adv-aspectRatio", "Aspect Ratio", state.promptParams.aspectRatio, VEO_ASPECT_RATIOS_DISPLAY, VEO_ASPECT_RATIOS_VALUES, PARAM_INFO_TOOLTIPS.aspectRatio)}
-                            ${createSelectFieldHTML("adv-lighting", "Lighting Conditions", state.promptParams.lighting, VEO_LIGHTING_CONDITIONS, VEO_LIGHTING_CONDITIONS, PARAM_INFO_TOOLTIPS.lighting)}
-                            ${createSelectFieldHTML("adv-cameraAngle", "Camera Angle", state.promptParams.cameraAngle, VEO_CAMERA_ANGLES, VEO_CAMERA_ANGLES, PARAM_INFO_TOOLTIPS.cameraAngle)}
-                            ${createSelectFieldHTML("adv-cameraMovement", "Camera Movement", state.promptParams.cameraMovement, VEO_CAMERA_MOVEMENTS, VEO_CAMERA_MOVEMENTS, PARAM_INFO_TOOLTIPS.cameraMovement)}
-                            ${createSelectFieldHTML("adv-durationHint", "Duration Hint", state.promptParams.durationHint, VEO_DURATION_HINTS, VEO_DURATION_HINTS, PARAM_INFO_TOOLTIPS.durationHint)}
-                            ${createTextFieldHTML("adv-negativePrompt", "Negative Prompt", state.promptParams.negativePrompt, "e.g., blurry, text, watermark", PARAM_INFO_TOOLTIPS.negativePrompt, "md:col-span-2 lg:col-span-3")}
-                        </div>
+                    <div class="space-y-4">
+                        ${viewModeToggleHTML}
+                        ${accordionHTML}
                         <div class="flex flex-col sm:flex-row justify-end items-center space-y-3 sm:space-y-0 sm:space-x-3 pt-4 border-t studio-border-soft">
-                            <button id="adv-clear-all-btn" class="px-4 py-2 text-sm font-medium rounded-md studio-button-secondary flex items-center" title="Reset advanced fields to default">
-                                ${createIconSpanHTML("delete", "default", "w-4 h-4 mr-2")} Reset Advanced Fields
+                            <button id="adv-clear-all-btn" class="px-4 py-2 text-sm font-medium rounded-md studio-button-secondary flex items-center" title="Reset advanced fields to default (respects Basic/Advanced view)">
+                                ${createIconSpanHTML("delete", "default", "w-4 h-4 mr-2")} Reset Fields
                             </button>
                             <button id="adv-done-btn" class="px-6 py-2 text-sm font-medium rounded-md studio-button-primary">Done</button>
                         </div>
@@ -1629,6 +1779,23 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         }
     }
 
+    // New handler for advanced settings changes
+    function handleAdvancedSettingChange(key, value) {
+        if (!state.promptParams.advanced) {
+            state.promptParams.advanced = {};
+        }
+        // Specific handling for top-level params if they are part of ADVANCED_CONTROLS_GROUPS
+        if (key === "aspectRatio" || key === "durationHint" || key === "negativePrompt") {
+            state.promptParams[key] = value;
+        } else {
+            state.promptParams.advanced[key] = value;
+        }
+        console.log(`[Advanced Param Update] ${key}: ${value}`, state.promptParams);
+        // Optionally, call a function here to update any live previews or dependent UI elements if needed
+        // For now, direct state update is the main goal. renderApp() will be called by other actions.
+    }
+
+
     function attachModalSpecificEventListeners(type) {
         const modalInnerContainer = generalModalContainer.querySelector('#modal-inner-container');
         if (!modalInnerContainer) return;
@@ -1636,12 +1803,63 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         if (type === 'advancedSettings') {
             modalInnerContainer.querySelector('#adv-clear-all-btn')?.addEventListener('click', handleClearAllAdvanced);
             modalInnerContainer.querySelector('#adv-done-btn')?.addEventListener('click', closeModal);
-            modalInnerContainer.querySelectorAll('select, input').forEach(el => {
-                el.addEventListener('change', (e) => {
-                    const paramName = e.target.id.replace('adv-', '');
-                    state.promptParams[paramName] = e.target.value;
+
+            // View Mode Toggle Buttons
+            const basicBtn = modalInnerContainer.querySelector('#adv-view-basic-btn');
+            const advancedBtn = modalInnerContainer.querySelector('#adv-view-advanced-btn');
+
+            if (basicBtn) {
+                basicBtn.addEventListener('click', () => {
+                    if (state.ui.advancedSettingsViewMode !== 'basic') {
+                        state.ui.advancedSettingsViewMode = 'basic';
+                        openModal('advancedSettings'); // Re-render modal with new view
+                    }
+                });
+            }
+            if (advancedBtn) {
+                advancedBtn.addEventListener('click', () => {
+                    if (state.ui.advancedSettingsViewMode !== 'advanced') {
+                        state.ui.advancedSettingsViewMode = 'advanced';
+                        openModal('advancedSettings'); // Re-render modal with new view
+                    }
+                });
+            }
+
+            // Accordion toggle logic
+            modalInnerContainer.querySelectorAll('.modal-accordion-header-temp').forEach(header => {
+                header.addEventListener('click', () => {
+                    const content = header.nextElementSibling;
+                    const icon = header.querySelector('.modal-accordion-icon');
+                    const isExpanded = header.getAttribute('aria-expanded') === 'true';
+
+                    header.setAttribute('aria-expanded', String(!isExpanded));
+                    content.classList.toggle('hidden');
+                    if (icon) icon.textContent = !isExpanded ? '[-]' : '[+]';
+                });
+                 header.addEventListener('keydown', (event) => { // Keyboard accessibility
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        header.click();
+                    }
                 });
             });
+
+            // Attach event listeners to the dynamically generated controls
+            if (UI.elements.advancedSettingsInputsMap) {
+                for (const [key, elementId] of Object.entries(UI.elements.advancedSettingsInputsMap)) {
+                    const inputElement = modalInnerContainer.querySelector(`#${elementId}`);
+                    if (inputElement) {
+                        const eventType = inputElement.tagName === 'SELECT' ? 'change' : 'input';
+                        inputElement.addEventListener(eventType, (e) => {
+                            handleAdvancedSettingChange(key, e.target.value);
+                        });
+                    } else {
+                        // This can happen if a control is not rendered due to Basic/Advanced view, which is fine.
+                        // console.warn(`Element with ID ${elementId} not found for key ${key} in advanced settings (current view: ${state.ui.advancedSettingsViewMode}).`);
+                    }
+                }
+            }
+
         } else if (type === 'critique') {
             modalInnerContainer.querySelectorAll('.critique-apply-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
@@ -1940,19 +2158,43 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
     }
 
     function handleClearAllAdvanced() {
-        const preservedDescription = state.promptParams.description;
-        const preservedStyle = state.promptParams.style;
-        const preservedNumPrompts = state.promptParams.numberOfPrompts;
-        const preservedAudio = state.promptParams.enableAudioPrompting;
+        const BASIC_CONTROL_KEYS = ['aspectRatio', 'durationHint'];
+        const currentViewMode = state.ui.advancedSettingsViewMode || 'basic';
 
-        state.promptParams = {
-            ...state.promptParams, // Keep imageB64 and imageMimeType if they exist
-            aspectRatio: '', cameraAngle: '', cameraMovement: '', lighting: '', durationHint: '', negativePrompt: '',
-            description: preservedDescription, style: preservedStyle, numberOfPrompts: preservedNumPrompts, enableAudioPrompting: preservedAudio
-        };
-        // No need to re-render the whole app, just the modal.
-        // However, closeModal and re-opening will re-render modal with fresh values
-        openModal('advancedSettings'); // Re-opens with fresh state
+        // Reset top-level basic params specifically
+        if (currentViewMode === 'basic' || BASIC_CONTROL_KEYS.includes('aspectRatio')) {
+            state.promptParams.aspectRatio = SCHEMA_INPUTS.aspectRatio?.default || '';
+        }
+        if (currentViewMode === 'basic' || BASIC_CONTROL_KEYS.includes('durationHint')) {
+            state.promptParams.durationHint = SCHEMA_INPUTS.durationHint?.default || '';
+        }
+
+        // For negativePrompt, handle based on its definition in SCHEMA_INPUTS if it exists
+        // This example assumes negativePrompt is not strictly a "basic" key but should be clearable.
+        // If negativePrompt were in BASIC_CONTROL_KEYS, the above logic would cover it.
+        if (currentViewMode === 'advanced' && SCHEMA_INPUTS.negativePrompt) { // Only clear if in advanced or if explicitly managed
+             // state.promptParams.negativePrompt = SCHEMA_INPUTS.negativePrompt?.default || ''; // Example if it was a top-level param
+        }
+
+        // Reset advanced params stored in state.promptParams.advanced
+        if (!state.promptParams.advanced) state.promptParams.advanced = {};
+
+        ADVANCED_CONTROLS_GROUPS.forEach(group => {
+            group.keys.forEach(key => {
+                // Skip keys already handled as direct state.promptParams properties
+                if (key === "aspectRatio" || key === "durationHint" || key === "negativePrompt") return;
+
+                const isBasicControl = BASIC_CONTROL_KEYS.includes(key);
+                if (SCHEMA_INPUTS[key]) { // Ensure schema exists for the key
+                    if (currentViewMode === 'advanced' || (currentViewMode === 'basic' && isBasicControl)) {
+                         state.promptParams.advanced[key] = SCHEMA_INPUTS[key]?.default || '';
+                    }
+                }
+            });
+        });
+
+        // Re-render the modal body to reflect cleared fields
+        openModal('advancedSettings');
     }
 
     function handleUseAsBase(promptText) {
@@ -2730,6 +2972,59 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             #${OVERLAY_ID} .material-icons.material-symbols-filled {
                 font-variation-settings: 'FILL' 1;
             }
+
+            /* Modal Accordion Styles */
+            #${OVERLAY_ID} .vfx-accordion-container { /* Container for all accordion groups */
+                /* Add any overall container styling if needed */
+            }
+            #${OVERLAY_ID} .modal-accordion-section { /* Individual accordion item */
+                background-color: hsla(0, 0%, 100%, 0.03); /* Slightly distinct from modal body */
+                border-radius: 4px;
+                margin-bottom: 0.5rem; /* Space between accordion items */
+                border: 1px solid hsla(0,0%,100%,0.08);
+            }
+            #${OVERLAY_ID} .modal-accordion-header-temp { /* Clickable header */
+                padding: 0.75rem 1rem; /* Increased padding */
+                cursor: pointer;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                transition: background-color 0.15s ease-in-out;
+                border-radius: 4px; /* Rounded corners for header if content is hidden */
+            }
+            #${OVERLAY_ID} .modal-accordion-header-temp:hover {
+                background-color: hsla(0, 0%, 100%, 0.07);
+            }
+            #${OVERLAY_ID} .modal-accordion-header-temp[aria-expanded="true"] {
+                border-bottom-left-radius: 0;
+                border-bottom-right-radius: 0;
+                border-bottom: 1px solid hsla(0,0%,100%,0.08); /* Separator line when open */
+            }
+            #${OVERLAY_ID} .modal-accordion-header-temp .text-sm { /* Target title span */
+                font-weight: 500; /* Make title a bit bolder */
+                color: hsla(0, 0%, 100%, 0.85);
+            }
+            #${OVERLAY_ID} .modal-accordion-icon { /* Styling for the [+]/[-] icon */
+                font-family: monospace; /* Monospace for consistent width */
+                font-size: 1rem;
+                font-weight: bold;
+                color: hsla(0, 0%, 100%, 0.6);
+                margin-left: 0.5rem;
+            }
+            #${OVERLAY_ID} .modal-accordion-content-temp { /* Content area of the accordion panel */
+                padding: 0; /* Grid inside will handle padding */
+                background-color: hsla(0,0%,0%,0.1);
+                border-top: none;
+                border-bottom-left-radius: 4px;
+                border-bottom-right-radius: 4px;
+            }
+            #${OVERLAY_ID} .modal-accordion-content-temp.hidden {
+                display: none;
+            }
+            #${OVERLAY_ID} .modal-accordion-content-temp .grid { /* Styling for the grid inside content */
+                padding: 0.75rem; /* Padding for the content itself */
+            }
+
             /* Tailwind-like utility classes (subset) - FIXED typos from # OVERLAY_ID} to #${OVERLAY_ID} */
             #${OVERLAY_ID} .fixed { position: fixed; } #${OVERLAY_ID} .inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
             #${OVERLAY_ID} .z-\\[9999\\] { z-index: 9999; } #${OVERLAY_ID} .z-\\[10000\\] { z-index: 10000; }
@@ -2858,6 +3153,16 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             #${OVERLAY_ID} .italic { font-style: italic; }
             #${OVERLAY_ID} .animate-spin { animation: spin 1s linear infinite; }
             #${OVERLAY_ID} @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+            /* Advanced settings active indicator style */
+            #${OVERLAY_ID} #vfx-advanced-settings-btn.adv-settings-active-indicator span { /* Target the icon span */
+                color: #A78BFA !important; /* purple-400, same as some other active elements */
+                font-weight: bold; /* Make icon slightly bolder */
+            }
+            #${OVERLAY_ID} #vfx-advanced-settings-btn.adv-settings-active-indicator:hover span {
+                color: #C4B5FD !important; /* lighter purple on hover if desired */
+            }
+
 
            /* Info Tooltip Specific styling (can be enhanced) */
             #${OVERLAY_ID} .info-tooltip-trigger { display: inline-flex; }
