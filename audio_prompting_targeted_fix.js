@@ -1717,7 +1717,6 @@ Output ONLY a valid JSON array, where each object in the array has the following
             const randomBtn = modalInnerContainer.querySelector('#theme-explorer-random-btn');
             const input = modalInnerContainer.querySelector('#theme-explorer-input');
             const genBtn = modalInnerContainer.querySelector('#theme-explorer-generate-btn');
-            const randomBtn = modalInnerContainer.querySelector('#theme-explorer-random-btn');
             const addSelectedBtn = modalInnerContainer.querySelector('#theme-explorer-add-selected-btn');
             const checkboxes = modalInnerContainer.querySelectorAll('.theme-idea-checkbox');
             const listItems = modalInnerContainer.querySelectorAll('.theme-idea-list-item');
