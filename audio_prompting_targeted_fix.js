@@ -2982,7 +2982,7 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                  vertical-align: middle; /* Align icons in button */
             }
              #${OVERLAY_ID} #vfx-tools-dropdown {
-                z-index: 55; /* Increased z-index for dropdown to be above sticky header */
+                z-index: 9990; /* Aggressively bring to front within the overlay */
             }
 
 
