@@ -42,6 +42,7 @@
     let isResizing = false;
     let dragOffset = { x: 0, y: 0 };
     let resizeHandle = null;
+    let resizeFontUpdateTimeout;
     
     // Event listener cleanup tracking
     let eventListeners = [];
@@ -113,7 +114,7 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             z-index: 10001;
             font-family: 'Google Sans', sans-serif;
-            font-size: 14px;
+            font-size: 0.875em; /* Changed from 14px to 0.875em */
             font-weight: 500;
             max-width: 300px;
             animation: slideInRight 0.3s ease-out;
@@ -151,6 +152,22 @@
     }
     
     // Window resize handler for responsive behavior
+    function updateOverlayFontSize() {
+        if (!overlayContainer) return;
+        const width = overlayContainer.offsetWidth;
+        let newBaseFontSize = '16px'; // Default
+        if (width < 700) {
+            newBaseFontSize = '13px';
+        } else if (width < 950) {
+            newBaseFontSize = '14px';
+        } else if (width < 1200) {
+            newBaseFontSize = '15px';
+        }
+        // else it remains 16px for >= 1200px
+
+        overlayContainer.style.fontSize = newBaseFontSize;
+    }
+
     function handleWindowResize() {
         safeExecute(() => {
             // Update max dimensions based on new window size
@@ -179,6 +196,7 @@
                     windowState.width = newWidth;
                     windowState.height = newHeight;
                 }
+                updateOverlayFontSize(); // Call adaptive font sizing
             }
         }, 'Window resize handler');
     }
@@ -188,6 +206,13 @@
     function debouncedWindowResize() {
         clearTimeout(resizeTimeout);
         resizeTimeout = setTimeout(handleWindowResize, 150);
+    }
+
+    function debouncedUpdateOverlayFontSizeDuringResize() {
+        clearTimeout(resizeFontUpdateTimeout);
+        resizeFontUpdateTimeout = setTimeout(() => {
+            updateOverlayFontSize();
+        }, 75); // ~75ms debounce delay
     }
     
     // State persistence helpers
@@ -289,15 +314,6 @@
 
     const PREAMBLE_CONFIG = {
         mainPromptGen: {
-            /**
-             * @param {number} numPrompts - The number of distinct prompts to generate.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Generates a specified number of Veo 2 video prompts based on user's textual description and/or image reference.
-             * Inputs (Implicit): User's textual prompt (from `promptText` in `callArtisanApiInternal`), user-provided image (if any, from `params.imageB64`).
-             * LLM Instructions: Elaborate on subject, context, action, style, camera, and ambiance. Adhere to Veo 2 best practices. Integrate image cues if provided.
-             * Expected LLM Output: JSON array of objects, each with a "prompt_text" key. Example: `[{ "prompt_text": "detailed prompt..." }, ...]`.
-             * Audio Difference: This is the 'audioOff' version; it does not instruct the LLM to include audio elements.
-             */
             audioOff: (numPrompts) => `You are an expert AI assistant, a "Veo 2 Prompt Artisan & Scene Annotator," specializing in crafting exceptionally detailed, creative, and effective prompts for Google's Veo 2 video generation model. Your capabilities are akin to a sophisticated system trained to annotate vast quantities of video and image data with rich, multi-layered textual descriptions. You understand how to translate a core idea, potentially augmented by a reference image, into a descriptive narrative that Veo 2 can optimally interpret to generate compelling video.
 
 Your primary goal is to generate ${numPrompts} distinct Veo 2 prompts based on the user's input (which may include a textual description and/or an image reference). Each prompt must be a self-contained string, ready for direct use. You will strictly adhere to the official Google Veo 2 prompting guidelines and best practices.
@@ -362,15 +378,6 @@ Example for ${numPrompts} prompt(s), strictly following the format:
 \`\`\`
 
 Focus on quality, adherence to Veo 2's capabilities, and maximizing creative potential by leveraging your understanding as both a prompt engineer and a sophisticated scene annotator.`,
-            /**
-             * @param {number} numPrompts - The number of distinct prompts to generate.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Generates a specified number of Veo 2 video prompts, including audio descriptions.
-             * Inputs (Implicit): User's textual prompt, user-provided image (if any).
-             * LLM Instructions: Similar to 'audioOff', but with an additional section (7. Audio Elements) instructing the LLM to naturally integrate sound effects, ambient noise, speech/dialogue hints, and music style.
-             * Expected LLM Output: JSON array of objects, each with a "prompt_text" key. Example: `[{ "prompt_text": "detailed prompt with audio..." }, ...]`.
-             * Audio Difference: This is the 'audioOn' version. It explicitly instructs the LLM to include audio elements.
-             */
             audioOn: (numPrompts) => `You are an expert AI assistant, a "Veo 2 Prompt Artisan & Scene Annotator," specializing in crafting exceptionally detailed, creative, and effective prompts for Google's Veo 2 video generation model. Your capabilities are akin to a sophisticated system trained to annotate vast quantities of video and image data with rich, multi-layered textual descriptions. You understand how to translate a core idea, potentially augmented by a reference image, into a descriptive narrative that Veo 2 can optimally interpret to generate compelling video.
 
 Your primary goal is to generate ${numPrompts} distinct Veo 2 prompts based on the user's input (which may include a textual description and/or an image reference). Each prompt must be a self-contained string, ready for direct use. You will strictly adhere to the official Google Veo 2 prompting guidelines and best practices.
@@ -444,14 +451,6 @@ Example for ${numPrompts} prompt(s), strictly following the format:
 Focus on quality, adherence to Veo 2's capabilities, and maximizing creative potential by leveraging your understanding as both a prompt engineer and a sophisticated scene annotator.`
         },
         sceneExtender: { // This preamble does NOT ask for JSON output from the LLM
-            /**
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Generates a new scene description that extends an original scene (implied by image + user text) for Veo 2.
-             * Inputs (Implicit): User's textual prompt describing the change/extension, user-provided image of the original scene.
-             * LLM Instructions: Create a comprehensive new scene description (max 150 words), integrating characters, actions, camera, lighting, etc. Maintain original style. Output only the new scene as a clean paragraph.
-             * Expected LLM Output: A single, clean, continuous paragraph (string) describing the new scene. NOT JSON.
-             * Audio Difference: This is the 'audioOff' version; no specific instructions for audio elements.
-             */
             audioOff: () => `You will be provided an input of an image and user provided prompt.
 Your task is to generate a new scene based off of the original image and the user's requested change to that scene for a text-to-video service. The new scene description must be comprehensive and contain all necessary information for the AI video generator to create the corresponding visual.
 IMPORTANT: Make sure the new scene is no more than 150 words.
@@ -470,14 +469,6 @@ Creative Enhancement: Add creative details to enhance the visual quality and mot
 Original Style: ALWAYS maintain the style of the original input. Pay close attention to details like the art style, color palettes, and overall aesthetic.
 VERY IMPORTANT!!! ONLY output the new scene, do it in a clean and continuous paragraph. VERY IMPORTANT!!!
 Emphasize the following user provided prompt and add more details if necessary to make better for a video generation model to give better result.`,
-            /**
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Generates a new scene description that extends an original scene, including audio descriptions.
-             * Inputs (Implicit): User's textual prompt, user-provided image.
-             * LLM Instructions: Similar to 'audioOff', but includes "Audio Considerations" to subtly weave in SFX, ambient noise, speech, or music style.
-             * Expected LLM Output: A single, clean, continuous paragraph (string) describing the new scene with integrated audio. NOT JSON.
-             * Audio Difference: This is the 'audioOn' version. It instructs the LLM to integrate audio cues naturally.
-             */
             audioOn: () => `You will be provided an input of an image and user provided prompt.
 Your task is to generate a new scene based off of the original image and the user's requested change to that scene for a text-to-video service. The new scene description must be comprehensive and contain all necessary information for the AI video generator to create the corresponding visual.
 IMPORTANT: Make sure the new scene is no more than 150 words.
@@ -499,15 +490,6 @@ VERY IMPORTANT!!! ONLY output the new scene, do it in a clean and continuous par
 Emphasize the following user provided prompt and add more details if necessary to make better for a video generation model to give better result.`
         },
         promptCritique: {
-            /**
-             * @param {string} promptToCritique - The user's prompt text to be critiqued.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Critiques a user-provided Veo 2 prompt and offers actionable suggestions for enhancement.
-             * Inputs (Implicit): `promptToCritique` (the user's prompt text).
-             * LLM Instructions: Analyze the prompt based on subject clarity, context, action, style, camera, ambiance, and Veo 2 best practices. Provide an overall critique and 2-3 specific, improved prompt suggestions.
-             * Expected LLM Output: JSON object: `{ "critique": "string", "suggested_enhancements": ["string", ...] }`.
-             * Audio Difference: This is the 'audioOff' version; critique focuses on visual and general prompt quality.
-             */
             audioOff: (promptToCritique) => `You are an expert AI assistant, a "Veo 2 Prompt Artisan & Scene Annotator," specializing in crafting and refining prompts for Google's Veo 2 video generation model. Your task is to critique the provided Veo 2 prompt and offer actionable suggestions for improvement, viewing the prompt as a potential scene description.
 
 Analyze the prompt based on its effectiveness as a detailed and evocative scene annotation for Veo 2, considering:
@@ -538,15 +520,6 @@ Do not include any other text, greetings, or explanations outside of this JSON s
 
 The prompt to critique is:
 "${promptToCritique}"`,
-            /**
-             * @param {string} promptToCritique - The user's prompt text to be critiqued.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Critiques a user-provided Veo 2 prompt, including audio aspects, and offers actionable suggestions.
-             * Inputs (Implicit): `promptToCritique`.
-             * LLM Instructions: Similar to 'audioOff', but adds "Audio Description Effectiveness" to the analysis criteria. Suggestions should also consider/improve audio elements.
-             * Expected LLM Output: JSON object: `{ "critique": "string", "suggested_enhancements": ["string", ...] }`.
-             * Audio Difference: This is the 'audioOn' version. Critique includes audio description effectiveness.
-             */
             audioOn: (promptToCritique) => `You are an expert AI assistant, a "Veo 2 Prompt Artisan & Scene Annotator," specializing in crafting and refining prompts for Google's Veo 2 video generation model. Your task is to critique the provided Veo 2 prompt and offer actionable suggestions for improvement, viewing the prompt as a potential scene description.
 
 Analyze the prompt based on its effectiveness as a detailed and evocative scene annotation for Veo 2, considering:
@@ -580,15 +553,6 @@ The prompt to critique is:
 "${promptToCritique}"`
         },
         themeExplorer: {
-            /**
-             * @param {string} theme - The theme provided by the user.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Brainstorms video concepts related to a user-provided theme.
-             * Inputs (Implicit): `theme` (user's theme text).
-             * LLM Instructions: Generate lists of ideas categorized as Potential Subjects/Characters, Evocative Settings/Environments, Key Visual Elements/Props, and Descriptive Moods/Styles/Keywords.
-             * Expected LLM Output: JSON object: `{ "theme_name": "string", "suggested_subjects_characters": ["string", ...], ... }`.
-             * Audio Difference: This is the 'audioOff' version; focuses on visual and conceptual elements.
-             */
             audioOff: (theme) => `You are a creative AI assistant, a "Veo 2 Prompt Artisan & Scene Annotator," specializing in brainstorming video concepts. The user has provided a theme: "${theme}".
 Your task is to generate a list of related ideas, suitable for developing into detailed scene descriptions (annotations) for Veo 2. Categorize these ideas as follows:
 
@@ -608,15 +572,6 @@ Output ONLY a valid JSON object with the following structure:
   "suggested_mood_keywords_styles": ["Mood/Style descriptor 1 for scene annotation", "Mood/Style descriptor 2...", "..."]
 }
 Do not include any other text, greetings, or explanations outside of this JSON structure.`,
-            /**
-             * @param {string} theme - The theme provided by the user.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Brainstorms video concepts related to a user-provided theme, including audio elements.
-             * Inputs (Implicit): `theme`.
-             * LLM Instructions: Similar to 'audioOff', but adds a category for "Suggested Audio Elements or Moods".
-             * Expected LLM Output: JSON object: `{ "theme_name": "string", ..., "suggested_audio_elements_moods": ["string", ...] }`.
-             * Audio Difference: This is the 'audioOn' version. Includes suggestions for audio elements.
-             */
             audioOn: (theme) => `You are a creative AI assistant, a "Veo 2 Prompt Artisan & Scene Annotator," specializing in brainstorming video concepts. The user has provided a theme: "${theme}".
 Your task is to generate a list of related ideas, suitable for developing into detailed scene descriptions (annotations) for Veo 2. Categorize these ideas as follows:
 
@@ -640,15 +595,6 @@ Output ONLY a valid JSON object with the following structure:
 Do not include any other text, greetings, or explanations outside of this JSON structure.`
         },
         promptElaboration: {
-            /**
-             * @param {string} originalPrompt - The user's original prompt text.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Elaborates on a user's existing Veo 2 prompt to make it more detailed and descriptive.
-             * Inputs (Implicit): `originalPrompt`.
-             * LLM Instructions: Enhance details about Subject, Action, Context, Style. Suggest/refine Camera work and Ambiance. Maintain core intent. Provide 1-2 elaborated versions.
-             * Expected LLM Output: JSON object: `{ "original_prompt": "string", "elaborated_prompts": ["string", ...] }`.
-             * Audio Difference: This is the 'audioOff' version; elaboration focuses on visual and contextual details.
-             */
             audioOff: (originalPrompt) => `You are an expert AI assistant, a "Veo 2 Prompt Artisan & Scene Annotator." Your task is to take the user's provided Veo 2 prompt and elaborate upon it, transforming it into a more detailed, descriptive, and evocative scene description (annotation) for video generation. Focus on enriching the existing concepts by adding layers of visual and contextual detail, as if meticulously annotating a complex scene.
 The original prompt is: "${originalPrompt}"
 
@@ -668,15 +614,6 @@ Output ONLY a valid JSON object with the following structure:
   ]
 }
 Do not include any other text, greetings, or explanations outside of this JSON structure. If the original prompt is already very detailed, you might return only one significantly enhanced version or a minor refinement focusing on annotative depth.`,
-            /**
-             * @param {string} originalPrompt - The user's original prompt text.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Elaborates on a user's existing Veo 2 prompt, including audio details.
-             * Inputs (Implicit): `originalPrompt`.
-             * LLM Instructions: Similar to 'audioOff', but also instructs to enhance or add relevant audio descriptions (SFX, ambient, speech, music) integrated naturally.
-             * Expected LLM Output: JSON object: `{ "original_prompt": "string", "elaborated_prompts": ["string", ...] }`.
-             * Audio Difference: This is the 'audioOn' version. Elaboration includes audio descriptions.
-             */
             audioOn: (originalPrompt) => `You are an expert AI assistant, a "Veo 2 Prompt Artisan & Scene Annotator." Your task is to take the user's provided Veo 2 prompt and elaborate upon it, transforming it into a more detailed, descriptive, and evocative scene description (annotation) for video generation. Focus on enriching the existing concepts by adding layers of visual and contextual detail, as if meticulously annotating a complex scene.
 Audio prompting is enabled. Enhance or add relevant audio descriptions (sound effects, ambient noise, speech characteristics, dialogue, music style) that fit the scene and are integrated naturally. If the original prompt contains dialogue, retain and refine it if possible, or weave in new concise dialogue if it enhances the scene.
 The original prompt is: "${originalPrompt}"
@@ -699,15 +636,6 @@ Output ONLY a valid JSON object with the following structure:
 Do not include any other text, greetings, or explanations outside of this JSON structure. If the original prompt is already very detailed, you might return only one significantly enhanced version or a minor refinement focusing on annotative depth.`
         },
         shotSequenceGen: {
-            /**
-             * @param {string} originalPrompt - The user's base prompt for the sequence.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Suggests 2-3 subsequent or related shots based on an initial prompt to form a visual sequence.
-             * Inputs (Implicit): `originalPrompt`.
-             * LLM Instructions: Generate 2-3 detailed Veo 2 prompts that logically follow or complement the original. Maintain style and mood.
-             * Expected LLM Output: JSON object: `{ "original_prompt": "string", "suggested_sequence_prompts": ["string", ...] }`.
-             * Audio Difference: This is the 'audioOff' version; focuses on visual sequence.
-             */
             audioOff: (originalPrompt) => `You are an expert AI assistant, a "Veo 2 Prompt Artisan & Scene Annotator." Your task is to take the user's provided Veo 2 prompt (which describes a single shot or scene annotation) and suggest 2-3 subsequent or related shots that could form a coherent visual sequence or mini-narrative, as if annotating a continuous piece of video.
 The original prompt (current scene annotation) is: "${originalPrompt}"
 
@@ -727,15 +655,6 @@ Output ONLY a valid JSON object with the following structure:
   ]
 }
 Do not include any other text, greetings, or explanations outside of this JSON structure. Provide 2 to 3 suggestions.`,
-            /**
-             * @param {string} originalPrompt - The user's base prompt for the sequence.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Suggests 2-3 subsequent shots, including audio descriptions, based on an initial prompt.
-             * Inputs (Implicit): `originalPrompt`.
-             * LLM Instructions: Similar to 'audioOff', but instructs to include relevant, naturally integrated audio descriptions in each suggested shot prompt.
-             * Expected LLM Output: JSON object: `{ "original_prompt": "string", "suggested_sequence_prompts": ["string with audio...", ...] }`.
-             * Audio Difference: This is the 'audioOn' version. Suggested shots include audio descriptions.
-             */
             audioOn: (originalPrompt) => `You are an expert AI assistant, a "Veo 2 Prompt Artisan & Scene Annotator." Your task is to take the user's provided Veo 2 prompt (which describes a single shot or scene annotation) and suggest 2-3 subsequent or related shots that could form a coherent visual sequence or mini-narrative, as if annotating a continuous piece of video.
 Audio prompting is enabled. For each suggested shot, include relevant audio descriptions (sound effects, ambient noise, speech characteristics, dialogue, music style) integrated naturally into the prompt text.
 The original prompt (current scene annotation) is: "${originalPrompt}"
@@ -758,15 +677,6 @@ Output ONLY a valid JSON object with the following structure:
 Do not include any other text, greetings, or explanations outside of this JSON structure. Provide 2 to 3 suggestions.`
         },
         charDetailGen: {
-            /**
-             * @param {string} characterConcept - The user's basic character concept.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Brainstorms and generates detailed visual suggestions for a character concept.
-             * Inputs (Implicit): `characterConcept`.
-             * LLM Instructions: Generate suggestions categorized as Key Appearance Details, Observable Personality Traits/Quirks, and Signature Visual Items/Accessories.
-             * Expected LLM Output: JSON object: `{ "character_concept": "string", "appearance_details": ["string", ...], ... }`.
-             * Audio Difference: This is the 'audioOff' version; focuses on visual details.
-             */
             audioOff: (characterConcept) => `You are an AI assistant, a "Veo 2 Prompt Artisan & Scene Annotator," specializing in character creation for video prompts. The user has provided a basic character concept: "${characterConcept}".
 Your task is to brainstorm and generate detailed visual suggestions for this character, suitable for inclusion in a rich scene description (annotation). Focus on attributes that would be visually prominent and contribute to a vivid character portrayal within a scene.
 
@@ -785,15 +695,6 @@ Output ONLY a valid JSON object with the following structure:
   "signature_items_accessories": ["Visually distinct item/accessory suggestion 1 for annotation", "Suggestion 2...", "..."]
 }
 Do not include any other text, greetings, or explanations outside of this JSON structure.`,
-            /**
-             * @param {string} characterConcept - The user's basic character concept.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Brainstorms detailed visual and vocal suggestions for a character concept.
-             * Inputs (Implicit): `characterConcept`.
-             * LLM Instructions: Similar to 'audioOff', but adds a category for "Suggested Vocal Characteristics/Sounds".
-             * Expected LLM Output: JSON object: `{ "character_concept": "string", ..., "suggested_vocal_characteristics_sounds": ["string", ...] }`.
-             * Audio Difference: This is the 'audioOn' version. Includes suggestions for vocal characteristics/sounds.
-             */
             audioOn: (characterConcept) => `You are an AI assistant, a "Veo 2 Prompt Artisan & Scene Annotator," specializing in character creation for video prompts. The user has provided a basic character concept: "${characterConcept}".
 Your task is to brainstorm and generate detailed visual suggestions for this character, suitable for inclusion in a rich scene description (annotation). Focus on attributes that would be visually prominent and contribute to a vivid character portrayal within a scene.
 Audio prompting is enabled. Also suggest vocal characteristics or sounds associated with the character.
@@ -817,16 +718,6 @@ Output ONLY a valid JSON object with the following structure:
 Do not include any other text, greetings, or explanations outside of this JSON structure.`
         },
         styleTransfer: {
-            /**
-             * @param {string} originalPrompt - The user's original prompt text.
-             * @param {string} targetStyle - The target visual style.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Rewrites a given prompt to reflect a new target visual style while preserving core elements.
-             * Inputs (Implicit): `originalPrompt`, `targetStyle`.
-             * LLM Instructions: Incorporate stylistic elements of the target style (adjectives, lighting, mood, tropes). Maintain fundamental narrative.
-             * Expected LLM Output: JSON object: `{ "stylized_prompt": "string" }`.
-             * Audio Difference: This is the 'audioOff' version; focuses on visual style transformation.
-             */
             audioOff: (originalPrompt, targetStyle) => `You are an expert AI assistant, a "Veo 2 Prompt Artisan," specializing in transforming the style of video prompts for Google's Veo 2 model.
 Your task is to take an original video prompt and a target visual style, then rewrite the prompt to reflect the new style while preserving the core subject, action, and setting of the original.
 
@@ -843,16 +734,6 @@ Output ONLY the rewritten prompt as a single JSON object with a "stylized_prompt
 }
 Do not include any other text, greetings, or explanations.
 For example, if original is "A cat chasing a mouse in a kitchen, sunny day" and target style is "Film Noir", the stylized prompt might be "In a dimly lit, shadow-strewn kitchen, a sleek black cat silently stalks an unsuspecting mouse, shafts of pale moonlight cutting through the gloom, Film Noir style."`,
-            /**
-             * @param {string} originalPrompt - The user's original prompt text.
-             * @param {string} targetStyle - The target visual style.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Rewrites a given prompt to reflect a new target style, including adapting/adding audio cues.
-             * Inputs (Implicit): `originalPrompt`, `targetStyle`.
-             * LLM Instructions: Similar to 'audioOff', but also focus on potential soundscapes influenced by the style. Adapt or suggest new audio cues fitting the target style.
-             * Expected LLM Output: JSON object: `{ "stylized_prompt": "string with adapted audio..." }`.
-             * Audio Difference: This is the 'audioOn' version. Adapts/suggests audio cues to match the new style.
-             */
             audioOn: (originalPrompt, targetStyle) => `You are an expert AI assistant, a "Veo 2 Prompt Artisan," specializing in transforming the style of video prompts for Google's Veo 2 model.
 Your task is to take an original video prompt and a target visual style, then rewrite the prompt to reflect the new style while preserving the core subject, action, and setting of the original.
 
@@ -872,15 +753,6 @@ Do not include any other text, greetings, or explanations.
 For example, if original is "A cat chasing a mouse in a kitchen, sunny day. Audio: playful squeaks, cat meows." and target style is "Film Noir", the stylized prompt might be "In a dimly lit, shadow-strewn kitchen, a sleek black cat silently stalks an unsuspecting mouse, shafts of pale moonlight cutting through the gloom, the faint sound of distant, melancholic jazz saxophone, Film Noir style. Audio: Tense silence punctuated by a floorboard creak, a barely audible, nervous squeak from the mouse."`
         },
         storyboardGen: {
-            /**
-             * @param {string} concept - The user's core concept for the storyboard.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Breaks down a video concept into a sequence of 3-5 distinct visual shots for a storyboard.
-             * Inputs (Implicit): `concept`.
-             * LLM Instructions: Generate 3-5 shots. Each shot needs a description (Veo 2 prompt, max 70 words), and optionally, suggested shot type, camera angle, and key elements.
-             * Expected LLM Output: JSON object: `{ "original_concept": "string", "storyboard_shots": [{ "shot_number": int, "description": "string", ... }, ...] }`.
-             * Audio Difference: This is the 'audioOff' version; focuses on visual storytelling.
-             */
             audioOff: (concept) => `You are an expert AI assistant, a "Veo 2 Prompt Artisan & Visual Storyteller," specializing in breaking down a core video concept into a sequence of distinct visual shots for a storyboard.
 The user has provided the following core concept: "${concept}"
 
@@ -908,15 +780,6 @@ Output ONLY a valid JSON object with the following structure:
   ]
 }
 Do not include any other text, greetings, or explanations outside of this JSON structure. Ensure the 'description' for each shot is a well-crafted Veo 2 prompt.`,
-            /**
-             * @param {string} concept - The user's core concept for the storyboard.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Breaks down a video concept into storyboard shots, including audio descriptions for each shot.
-             * Inputs (Implicit): `concept`.
-             * LLM Instructions: Similar to 'audioOff', but each shot must also include an "audio_description" field detailing relevant SFX, ambient noise, dialogue, or music.
-             * Expected LLM Output: JSON object: `{ "original_concept": "string", "storyboard_shots": [{ "shot_number": int, "description": "string", ..., "audio_description": "string" }, ...] }`.
-             * Audio Difference: This is the 'audioOn' version. Each shot includes an "audio_description".
-             */
             audioOn: (concept) => `You are an expert AI assistant, a "Veo 2 Prompt Artisan & Visual Storyteller," specializing in breaking down a core video concept into a sequence of distinct visual shots for a storyboard.
 The user has provided the following core concept: "${concept}"
 Audio prompting is enabled. For each shot, include an "audio_description" field detailing relevant sound effects, ambient noise, dialogue snippets, or music cues, integrated naturally.
@@ -949,40 +812,14 @@ Output ONLY a valid JSON object with the following structure:
 Do not include any other text, greetings, or explanations outside of this JSON structure. Ensure the 'description' for each shot is a well-crafted Veo 2 prompt.`
         },
         inferVisualParams: {
-            /**
-             * @param {string} description - User's textual description of the concept.
-             * @param {boolean} imageProvided - Whether an image was provided by the user.
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Analyzes a video concept (text and/or image) to suggest visual parameters like style, camera angle, movement, and lighting.
-             * Inputs (Implicit): `description`, `imageProvided`.
-             * LLM Instructions: Analyze concept and suggest parameters. Style must be from the provided VEO_STYLES list or omitted.
-             * Expected LLM Output: JSON object: `{"style"?: "string", "cameraAngle"?: "string", "cameraMovement"?: "string", "lighting"?: "string"}`.
-             * Audio Difference: Both 'audioOn' and 'audioOff' versions have identical instructions here as this feature is purely visual parameter inference.
-             */
             audioOff: (description, imageProvided) => `Analyze video concept (and image if provided). Suggest visual parameters. Output JSON: {"style"?, "cameraAngle"?, "cameraMovement"?, "lighting"?}. Style MUST be from [${VEO_STYLES_STRING_FOR_LLM}] or omitted. Concept: "${description || (imageProvided ? "See image." : "Generic.")}"`,
             audioOn: (description, imageProvided) => `Analyze video concept (and image if provided). Suggest visual parameters. Output JSON: {"style"?, "cameraAngle"?, "cameraMovement"?, "lighting"?}. Style MUST be from [${VEO_STYLES_STRING_FOR_LLM}] or omitted. Concept: "${description || (imageProvided ? "See image." : "Generic.")}"`
         },
         surpriseMe: {
-            /**
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Generates a random, unexpected, and wildly creative video concept with strong visual potential.
-             * Inputs (Implicit): None directly to the function, but uses VEO_STYLES_STRING_FOR_LLM.
-             * LLM Instructions: Generate a random, creative concept (max 20-30 words), a suggested style from the list, and optional camera/lighting.
-             * Expected LLM Output: Single JSON object: `{"concept": "string", "suggestedStyle": "string", "suggestedCameraAngle"?: "string", ...}`.
-             * Audio Difference: This is the 'audioOff' version; focuses on visual concept generation.
-             */
             audioOff: () => `AI assistant, "Veo 2 Prompt Artisan & Scene Annotator", imaginative. Generate RANDOM, UNEXPECTED, WILDLY CREATIVE video concepts with strong visual potential for Veo 2 annotations. Avoid tropes unless novel. Maximize diversity. Surprise user. Concepts should be "annotatable". Mashup genres, give mundane objects extraordinary abilities, bizarre predicaments. Spark imagination for detailed visual scene. Examples:
 - 'Melancholic sloth, speed chess champion, velvet smoking jacket, on melting iceberg, aurora borealis.'
 - 'Sentient argyle sock puppet detective, mismatched button eyes, examines giant lint ball, noir miniature city of laundry items.'
 Output ONLY a single, valid JSON object with the following structure: {"concept": "string (MAX 20-30 words, visual nouns/actions)", "suggestedStyle": "string from list", "suggestedCameraAngle"?: "string", "suggestedCameraMovement"?: "string", "suggestedLighting"?: "string"}. Do NOT output a JSON array. "suggestedStyle" MUST be from [${VEO_STYLES_STRING_FOR_LLM}]. Concept most unique. Style/camera enhance "annotatability".`,
-            /**
-             * @returns {string} The preamble string for the LLM.
-             * Purpose: Generates a random, creative video concept including audio suggestions.
-             * Inputs (Implicit): None directly, but uses VEO_STYLES_STRING_FOR_LLM.
-             * LLM Instructions: Similar to 'audioOff', but also asks for 1-2 brief audio ideas (SFX, music mood, dialogue hint).
-             * Expected LLM Output: Single JSON object: `{"concept": "string", ..., "suggestedAudio"?: ["string", "string"]}`.
-             * Audio Difference: This is the 'audioOn' version. Includes "suggestedAudio" in the output.
-             */
             audioOn: () => `AI assistant, "Veo 2 Prompt Artisan & Scene Annotator", imaginative. Generate RANDOM, UNEXPECTED, WILDLY CREATIVE video concepts with strong visual potential for Veo 2 annotations. Avoid tropes unless novel. Maximize diversity. Surprise user. Concepts should be "annotatable". Mashup genres, give mundane objects extraordinary abilities, bizarre predicaments. Spark imagination for detailed visual scene. Examples:
 - 'Melancholic sloth, speed chess champion, velvet smoking jacket, on melting iceberg, aurora borealis. Audio: Gentle lapping of water, sloth's thoughtful sigh, faint classical music.'
 - 'Sentient argyle sock puppet detective, mismatched button eyes, examines giant lint ball, noir miniature city of laundry items. Audio: Tiny squeaky footsteps, dramatic jazz sting, detective's muffled internal monologue.'
@@ -1100,43 +937,6 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         });
     }
     // --- END: Utility Functions ---
-
-    // --- START: Prompt History Logic ---
-    const MAX_HISTORY_ITEMS = 10;
-    const PROMPT_HISTORY_KEY = 'vfx-artisan-prompt-history';
-
-    function getPromptHistory() {
-        const historyJSON = localStorage.getItem(PROMPT_HISTORY_KEY);
-        try {
-            const history = historyJSON ? JSON.parse(historyJSON) : [];
-            return Array.isArray(history) ? history : [];
-        } catch (e) {
-            console.error("Error parsing prompt history:", e);
-            return [];
-        }
-    }
-
-    function addPromptToHistory(promptText) {
-        if (!promptText || !promptText.trim()) return;
-        let history = getPromptHistory();
-        // Remove existing entry if present to move it to the top
-        history = history.filter(item => item !== promptText);
-        history.unshift(promptText); // Add to the beginning
-        if (history.length > MAX_HISTORY_ITEMS) {
-            history = history.slice(0, MAX_HISTORY_ITEMS); // Keep only the newest MAX_HISTORY_ITEMS
-        }
-        localStorage.setItem(PROMPT_HISTORY_KEY, JSON.stringify(history));
-    }
-
-    function handleClearPromptHistory() {
-        localStorage.removeItem(PROMPT_HISTORY_KEY);
-        // If modal is open, re-render its body to show empty state
-        if (state.activeModal && state.activeModal.type === 'promptHistory') {
-            openModal('promptHistory', { history: [] }); // Re-open/refresh the modal
-        }
-        showTemporaryNotification("Prompt history cleared.", "info");
-    }
-    // --- END: Prompt History Logic ---
 
     // --- START: API Interaction Logic ---
     async function callArtisanApiInternal(apiActionKey, promptText, params = {}, featureSpecificData = {}) {
@@ -1586,7 +1386,6 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             case 'styleTransfer': title = "Transfer Style ✨"; break;
             case 'storyboard': title = "Prompt to Storyboard ✨"; break;
             case 'visualize': title = "Visualize Prompt ✨ (UI Only)"; break;
-            case 'promptHistory': title = "Prompt History"; break;
             default: title = "Modal";
         }
 
@@ -1850,27 +1649,6 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                 }
                 visualizeContent += `</div>`;
                 return visualizeContent;
-            case 'promptHistory':
-                // data.history should ideally be passed when opening, but fallback to getPromptHistory()
-                const history = (data && Array.isArray(data.history)) ? data.history : getPromptHistory();
-                if (!history || history.length === 0) {
-                    return `<p class="vpa-text-subdued text-center py-4">No prompt history yet.</p>
-                            <div class="flex justify-center mt-4">
-                                <button id="vfx-clear-history-btn" class="studio-button-secondary" disabled>Clear History</button>
-                            </div>`;
-                }
-                return `
-                    <ul class="space-y-1 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
-                        ${history.map(prompt => `
-                            <li class="p-2 hover:bg-gray-700 cursor-pointer rounded vpa-text-main truncate text-sm" title="${sanitizeHTML(prompt)}" data-prompt-text="${sanitizeHTML(prompt)}">
-                                ${sanitizeHTML(prompt)}
-                            </li>
-                        `).join('')}
-                    </ul>
-                    <div class="flex justify-end mt-4 pt-4 border-t studio-border-soft">
-                        <button id="vfx-clear-history-btn" class="studio-button-secondary">Clear History</button>
-                    </div>
-                `;
             default:
                 return '<p class="vpa-text-subdued">No content configured for this modal type.</p>';
         }
@@ -2000,18 +1778,6 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         } else if (type === 'visualize') {
             const ackBtn = modalInnerContainer.querySelector('#visualize-acknowledge-btn');
             if(ackBtn) ackBtn.addEventListener('click', closeModal);
-        } else if (type === 'promptHistory') {
-            modalInnerContainer.querySelector('#vfx-clear-history-btn')?.addEventListener('click', handleClearPromptHistory);
-            modalInnerContainer.querySelectorAll('li[data-prompt-text]').forEach(item => {
-                item.addEventListener('click', (e) => {
-                    const selectedPrompt = e.currentTarget.dataset.promptText;
-                    state.promptParams.description = selectedPrompt;
-                    if(mainTextarea) mainTextarea.value = selectedPrompt;
-                    // state.generatedPrompts = []; // Optionally clear current results
-                    renderApp();
-                    closeModal();
-                });
-            });
         }
     }
     // --- END: Modal Rendering ---
@@ -2090,10 +1856,6 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
     }
 
     async function handleSubmitPrompt() {
-        if (state.promptParams.description && state.promptParams.description.trim()) {
-            addPromptToHistory(state.promptParams.description);
-        }
-
         if ((!state.promptParams.description || !state.promptParams.description.trim()) && !state.uploadedImage) {
             showError("Please describe your vision or upload an image.");
             return;
@@ -2496,35 +2258,29 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                         <h1 class="text-lg font-medium vpa-text-main"> Veo <span class="font-normal vpa-text-subdued">Prompt Artisan</span></h1>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <!-- Tools Menu -->
-                        <div id="vfx-tools-menu-container" class="relative">
-                            <button id="vfx-tools-menu-btn" class="p-2 rounded-full text-gray-300 hover:text-white hover:bg-gray-700 inline-flex items-center justify-center shrink-0" title="Open Artisan Tools">
-                                ${createIconSpanHTML("construction", "default", "w-5 h-5")} <span class="ml-1 hidden sm:inline">Tools</span>
+                        <!-- Tools Dropdown - Start -->
+                        <div class="relative" style="margin-left: auto; position: relative;">
+                            <button id="vfx-tools-menu-btn" class="p-2 rounded-full vpa-text-subdued hover:vpa-text-main hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 flex items-center" title="Tools & Actions">
+                                ${createIconSpanHTML("construction", "default", "w-5 h-5 mr-1 sm:mr-2")} <span class="hidden sm:inline">Tools</span> ${createIconSpanHTML("arrow_drop_down", "default", "w-5 h-5 ml-0 sm:ml-1")}
                             </button>
-                            <div id="vfx-tools-dropdown" class="absolute right-0 mt-2 w-64 studio-bg-elevated rounded-md shadow-lg py-1 z-50 border studio-border-strong hidden">
-                                <button data-tool="advancedSettings" class="vfx-tool-item w-full text-left px-4 py-2 text-sm vpa-text-main hover:bg-gray-700">Advanced Settings</button>
-                                <button data-tool="critique" class="vfx-tool-item w-full text-left px-4 py-2 text-sm vpa-text-main hover:bg-gray-700">Critique & Enhance Current</button>
-                                <button data-tool="elaborate" class="vfx-tool-item w-full text-left px-4 py-2 text-sm vpa-text-main hover:bg-gray-700">Elaborate Current</button>
-                                <button data-tool="sequence" class="vfx-tool-item w-full text-left px-4 py-2 text-sm vpa-text-main hover:bg-gray-700">Suggest Sequence from Current</button>
-                                <button data-tool="styleTransfer" class="vfx-tool-item w-full text-left px-4 py-2 text-sm vpa-text-main hover:bg-gray-700">Transfer Style of Current</button>
-                                <hr class="my-1 studio-border-soft">
-                                <button data-tool="storyboard" class="vfx-tool-item w-full text-left px-4 py-2 text-sm vpa-text-main hover:bg-gray-700">Prompt to Storyboard</button>
-                                <button data-tool="charGen" class="vfx-tool-item w-full text-left px-4 py-2 text-sm vpa-text-main hover:bg-gray-700">Character Generator</button>
-                                <button data-tool="themeExplorer" class="vfx-tool-item w-full text-left px-4 py-2 text-sm vpa-text-main hover:bg-gray-700">Theme Explorer</button>
-                                <hr class="my-1 studio-border-soft">
-                                <button data-tool="surpriseMe" class="vfx-tool-item w-full text-left px-4 py-2 text-sm vpa-text-main hover:bg-gray-700 flex items-center">
-                                    ${createIconSpanHTML("lightbulb", "default", "w-5 h-5 mr-2")} Surprise Me
-                                </button>
-                                <button data-tool="resetAll" class="vfx-tool-item w-full text-left px-4 py-2 text-sm vpa-text-main hover:bg-gray-700 flex items-center">
-                                    ${createIconSpanHTML("delete", "default", "w-5 h-5 mr-2")} Reset All Fields
-                                </button>
-                                <hr class="my-1 studio-border-soft">
-                                <button data-tool="promptHistory" class="vfx-tool-item w-full text-left px-4 py-2 text-sm vpa-text-main hover:bg-gray-700 flex items-center">
-                                    ${createIconSpanHTML("history", "default", "w-5 h-5 mr-2")} Prompt History
-                                </button>
+                            <div id="vfx-tools-dropdown" class="absolute right-0 mt-2 w-72 bg-gray-800 border border-gray-700 rounded-md shadow-lg py-1 z-50 hidden" style="top: 100%;">
+                                <a href="#" class="vfx-tool-item block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white" data-tool="storyboard">${createIconSpanHTML("view_carousel", "default", "w-4 h-4 mr-2 inline-block")}Prompt to Storyboard ✨</a>
+                                <a href="#" class="vfx-tool-item block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white" data-tool="characterGen">${createIconSpanHTML("person", "default", "w-4 h-4 mr-2 inline-block")}Character Detail Generator ✨</a>
+                                <a href="#" class="vfx-tool-item block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white" data-tool="themeExplorer">${createIconSpanHTML("search", "default", "w-4 h-4 mr-2 inline-block")}Theme Explorer ✨</a>
+                                <div class="my-1 border-t border-gray-700"></div>
+                                <a href="#" class="vfx-tool-item block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white" data-tool="critique">${createIconSpanHTML("auto_awesome", "default", "w-4 h-4 mr-2 inline-block")}Critique & Enhance Prompt ✨</a>
+                                <a href="#" class="vfx-tool-item block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white" data-tool="elaborate">${createIconSpanHTML("rate_review", "default", "w-4 h-4 mr-2 inline-block")}Elaborate Current Prompt ✨</a>
+                                <a href="#" class="vfx-tool-item block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white" data-tool="sequence">${createIconSpanHTML("movie", "default", "w-4 h-4 mr-2 inline-block")}Suggest Shot Sequence ✨</a>
+                                <a href="#" class="vfx-tool-item block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white" data-tool="styleTransfer">${createIconSpanHTML("palette", "default", "w-4 h-4 mr-2 inline-block")}Transfer Style ✨</a>
+                                <a href="#" class="vfx-tool-item block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white" data-tool="visualize">${createIconSpanHTML("image", "default", "w-4 h-4 mr-2 inline-block")}Visualize Prompt (UI Only) ✨</a>
+                                <div class="my-1 border-t border-gray-700"></div>
+                                <a href="#" class="vfx-tool-item block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white" data-tool="advancedSettings">${createIconSpanHTML("settings", "default", "w-4 h-4 mr-2 inline-block")}Advanced Settings ⚙️</a>
+                                <div class="my-1 border-t border-gray-700"></div>
+                                <a href="#" class="vfx-tool-item block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white" data-tool="surpriseMe">${createIconSpanHTML("lightbulb", "default", "w-4 h-4 mr-2 inline-block")}Surprise Me 🎉</a>
+                                <a href="#" class="vfx-tool-item block px-4 py-2 text-sm text-red-400 hover:bg-red-700 hover:text-white" data-tool="resetAll">${createIconSpanHTML("delete_sweep", "default", "w-4 h-4 mr-2 inline-block")}Reset All Fields ♻️</a>
                             </div>
                         </div>
-                         <!-- End Tools Menu -->
+                        <!-- Tools Dropdown - End -->
                         <button id="vfx-minimize-btn" class="p-1.5 rounded-full vpa-text-subdued hover:vpa-text-main hover:bg-yellow-600" title="Minimize">
                             <span style="font-family: monospace;">−</span>
                         </button>
@@ -2607,12 +2363,14 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                             </span>
                             <div class="relative inline-flex ml-2 info-tooltip-trigger" title="${sanitizeHTML(PARAM_INFO_TOOLTIPS.enableAudioPrompting)}">${createIconSpanHTML("info", "default", "w-4 h-4 text-gray-400 hover:text-gray-200 cursor-help")}</div>
                         </div>
-                        ${createSelectFieldHTML("footer-numberOfPrompts", "Outputs per prompt", state.promptParams.numberOfPrompts, VEO_PROMPT_COUNT_OPTIONS_DISPLAY, VEO_PROMPT_COUNT_OPTIONS_VALUES, "", "lg:col-span-1")}
-                        ${createSelectFieldHTML("footer-style", "Visual Style", state.promptParams.style, VEO_STYLES, VEO_STYLES, "", "lg:col-span-1")}
+                        ${createSelectFieldHTML("footer-numberOfPrompts", "Outputs per prompt", state.promptParams.numberOfPrompts, VEO_PROMPT_COUNT_OPTIONS_DISPLAY, VEO_PROMPT_COUNT_OPTIONS_VALUES, PARAM_INFO_TOOLTIPS.numberOfPrompts, "lg:col-span-1")}
+                        ${createSelectFieldHTML("footer-style", "Visual Style", state.promptParams.style, VEO_STYLES, VEO_STYLES, PARAM_INFO_TOOLTIPS.style, "lg:col-span-1")}
                         <div id="footer-sceneext-placeholder" class="lg:col-span-2 hidden lg:block"></div> <!-- Placeholder for grid alignment -->
-                        <!-- Removed buttons from here, they are now in the Tools dropdown -->
+
                         <div id="footer-buttons-group" class="flex space-x-1 sm:space-x-2 items-center lg:col-span-3 justify-end pt-2 md:pt-0 mt-2 md:mt-0 w-full">
-                           <!-- Intentionally empty or for future very common actions not suitable for tools menu -->
+                            <!-- Removed vfx-storyboard-btn, vfx-char-gen-btn, vfx-theme-explorer-btn, vfx-surprise-me-footer, vfx-reset-all-btn, vfx-advanced-settings-btn -->
+                            <!-- These buttons are now in the Tools dropdown -->
+                            <span class="text-xs vpa-text-faint hidden sm:inline">Quick actions moved to ✨Tools menu in header.</span>
                         </div>
                     </div>
                      <div class="flex items-end space-x-2 sm:space-x-3 mt-3">
@@ -2645,13 +2403,12 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         footerStyleSelect = overlayContainer.querySelector('#footer-style');
         footerNumPromptsSelect = overlayContainer.querySelector('#footer-numberOfPrompts');
         footerAudioToggle = overlayContainer.querySelector('#footer-audio-toggle');
-        // Footer buttons are now part of the tools dropdown, direct references removed
-        // footerAdvancedSettingsButton = overlayContainer.querySelector('#vfx-advanced-settings-btn');
-        // footerResetAllButton = overlayContainer.querySelector('#vfx-reset-all-btn');
-        // footerSurpriseMeButton = overlayContainer.querySelector('#vfx-surprise-me-footer');
-        // footerThemeExplorerButton = overlayContainer.querySelector('#vfx-theme-explorer-btn');
-        // footerCharGenButton = overlayContainer.querySelector('#vfx-char-gen-btn');
-        // footerStoryboardButton = overlayContainer.querySelector('#vfx-storyboard-btn');
+        // footerAdvancedSettingsButton = overlayContainer.querySelector('#vfx-advanced-settings-btn'); // Moved
+        // footerResetAllButton = overlayContainer.querySelector('#vfx-reset-all-btn'); // Moved
+        // footerSurpriseMeButton = overlayContainer.querySelector('#vfx-surprise-me-footer'); // Moved
+        // footerThemeExplorerButton = overlayContainer.querySelector('#vfx-theme-explorer-btn'); // Moved
+        // footerCharGenButton = overlayContainer.querySelector('#vfx-char-gen-btn'); // Moved
+        // footerStoryboardButton = overlayContainer.querySelector('#vfx-storyboard-btn'); // Moved
         generateButton = overlayContainer.querySelector('#vfx-generate-btn');
         clearPromptButton = overlayContainer.querySelector('#vfx-clear-prompt-btn');
         uploadImageButton = overlayContainer.querySelector('#vfx-upload-image-btn');
@@ -2801,6 +2558,7 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                     windowState.height = newHeight;
                     windowState.x = constrained.x;
                     windowState.y = constrained.y;
+                    debouncedUpdateOverlayFontSizeDuringResize(); // Call debounced adaptive font sizing
                 }
             }, 'Document mousemove');
         });
@@ -2906,11 +2664,11 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             console.error('[VideoFX Artisan] Audio toggle container not found');
         }
 
-        // Footer action buttons are now handled by the Tools dropdown listeners
+        // Footer action buttons - These are now handled by the Tools dropdown logic
         // footerAdvancedSettingsButton.addEventListener('click', () => openModal('advancedSettings'));
         // footerResetAllButton.addEventListener('click', handleResetAllFields);
         // footerSurpriseMeButton.addEventListener('click', handleSurpriseMe);
-        overlayContainer.querySelector('#vfx-surprise-me-welcome').addEventListener('click', handleSurpriseMe); // Welcome screen surprise me still uses its own button
+        overlayContainer.querySelector('#vfx-surprise-me-welcome').addEventListener('click', handleSurpriseMe); // Welcome screen surprise me (keep this one)
         // footerThemeExplorerButton.addEventListener('click', () => openModal('themeExplorer'));
         // footerCharGenButton.addEventListener('click', () => openModal('characterGen'));
         // footerStoryboardButton.addEventListener('click', () => openModal('storyboard'));
@@ -2922,49 +2680,53 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
 
         if (toolsMenuBtn && toolsDropdown) {
             toolsMenuBtn.addEventListener('click', (event) => {
-                event.stopPropagation(); // Prevent click from immediately closing dropdown
-                toolsDropdown.classList.toggle('hidden');
+                event.stopPropagation(); // Prevent document click listener from closing it immediately
+                const isHidden = toolsDropdown.classList.contains('hidden');
+                toolsDropdown.classList.toggle('hidden', !isHidden);
+                toolsMenuBtn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
             });
 
-            // Close dropdown if clicked outside
-            addTrackedEventListener(document, 'click', (event) => {
+            document.addEventListener('click', (event) => {
                 if (!toolsDropdown.classList.contains('hidden') && !toolsMenuBtn.contains(event.target) && !toolsDropdown.contains(event.target)) {
                     toolsDropdown.classList.add('hidden');
+                    toolsMenuBtn.setAttribute('aria-expanded', 'false');
                 }
             });
 
-            toolsDropdown.querySelectorAll('.vfx-tool-item').forEach(button => {
-                button.addEventListener('click', () => {
-                    const tool = button.dataset.tool;
-                    const currentPromptText = state.promptParams.description;
-                    const hasActivePrompt = currentPromptText && currentPromptText.trim() !== '';
+            toolsDropdown.querySelectorAll('.vfx-tool-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const tool = e.currentTarget.dataset.tool;
+                    toolsDropdown.classList.add('hidden'); // Close dropdown after selection
+                    toolsMenuBtn.setAttribute('aria-expanded', 'false');
+
+                    // Centralized handling for tools that need the current prompt
+                    const needsPromptContext = ['critique', 'elaborate', 'sequence', 'styleTransfer', 'visualize'];
+                    let promptForTool = null;
+                    if (needsPromptContext.includes(tool)) {
+                        // For now, we'll use the main prompt text.
+                        // Later, this could be adapted if we have a "selected prompt from list" concept.
+                        promptForTool = { id: 'main_input', text: state.promptParams.description };
+                        if (!promptForTool.text || !promptForTool.text.trim()) {
+                            showTemporaryNotification("Please enter a main prompt first to use this tool.", "warning");
+                            return;
+                        }
+                    }
 
                     switch (tool) {
+                        case 'storyboard': openModal('storyboard', { conceptInput: state.promptParams.description }); break;
+                        case 'characterGen': openModal('characterGen', { conceptInput: state.promptParams.description }); break;
+                        case 'themeExplorer': openModal('themeExplorer', { themeInput: state.promptParams.description }); break;
+                        case 'critique': openModal('critique', { promptToCritique: promptForTool }); break;
+                        case 'elaborate': openModal('elaborate', { promptToElaborate: promptForTool }); break;
+                        case 'sequence': openModal('sequence', { basePrompt: promptForTool }); break;
+                        case 'styleTransfer': openModal('styleTransfer', { promptToStyle: promptForTool, originalPromptText: promptForTool.text }); break;
+                        case 'visualize': openModal('visualize', { promptToVisualize: promptForTool }); break;
                         case 'advancedSettings': openModal('advancedSettings'); break;
-                        case 'critique':
-                            if (hasActivePrompt) openModal('critique', { promptToCritique: { text: currentPromptText } });
-                            else showTemporaryNotification("Enter a prompt first to use Critique.", "warning");
-                            break;
-                        case 'elaborate':
-                            if (hasActivePrompt) openModal('elaborate', { promptToElaborate: { text: currentPromptText } });
-                            else showTemporaryNotification("Enter a prompt first to use Elaborate.", "warning");
-                            break;
-                        case 'sequence':
-                            if (hasActivePrompt) openModal('sequence', { basePrompt: { text: currentPromptText } });
-                            else showTemporaryNotification("Enter a prompt first to use Sequence.", "warning");
-                            break;
-                        case 'styleTransfer':
-                            if (hasActivePrompt) openModal('styleTransfer', { promptToStyle: { text: currentPromptText }, originalPromptText: currentPromptText });
-                            else showTemporaryNotification("Enter a prompt first to use Style Transfer.", "warning");
-                            break;
-                        case 'storyboard': openModal('storyboard'); break; // storyboard can start from scratch or use current
-                        case 'charGen': openModal('characterGen'); break;
-                        case 'themeExplorer': openModal('themeExplorer'); break;
                         case 'surpriseMe': handleSurpriseMe(); break;
                         case 'resetAll': handleResetAllFields(); break;
-                        case 'promptHistory': openModal('promptHistory', { history: getPromptHistory() }); break;
+                        default: console.warn("Unknown tool selected:", tool);
                     }
-                    toolsDropdown.classList.add('hidden'); // Hide dropdown after action
                 });
             });
         }
@@ -3012,6 +2774,7 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         addTrackedEventListener(window, 'beforeunload', saveWindowState);
         
         renderApp(); // Initial render
+        updateOverlayFontSize(); // Initial font size update
         // Overlay starts hidden, toggle button will show it.
         if (overlayContainer) overlayContainer.style.display = 'none';
         if (generalModalContainer) generalModalContainer.style.display = 'none';
@@ -3019,11 +2782,10 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         // MOVED GM_addStyle CALLS INSIDE THE IIFE, specifically at the end of init()
           // --- CSS Styles (GM_addStyle) ---
         GM_addStyle(`
-            /* --- Global Overlay & Font Styles --- */
             #${OVERLAY_ID} {
                 font-family: 'Google Sans Text', 'Google Sans', 'Space Grotesk', sans-serif;
-                background-color: #121212; /* Base background for the entire overlay */
-                color: hsl(200, 12%, 95.1%); /* Default text color */
+                background-color: #121212;
+                color: hsl(200, 12%, 95.1%);
                 -webkit-font-smoothing: antialiased;
                 -moz-osx-font-smoothing: grayscale;
                 overflow: hidden;
@@ -3032,55 +2794,23 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             #${OVERLAY_ID} .custom-scrollbar::-webkit-scrollbar-track { background: hsla(0, 0%, 100%, 0.05); border-radius:4px; }
             #${OVERLAY_ID} .custom-scrollbar::-webkit-scrollbar-thumb { background: hsla(0, 0%, 100%, 0.2); border-radius: 4px; }
             #${OVERLAY_ID} .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: hsla(0, 0%, 100%, 0.3); }
-
-            /* --- Animations --- */
             #${OVERLAY_ID} @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
             #${OVERLAY_ID} .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
             #${OVERLAY_ID} @keyframes popIn { 0% { opacity: 0; transform: scale(0.95) translateY(10px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
             #${OVERLAY_ID} .animate-popIn { animation: popIn 0.3s ease-out forwards; }
-            #${OVERLAY_ID} .animate-spin { animation: spin 1s linear infinite; }
-            #${OVERLAY_ID} @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-            /* --- Base Text & Background Styles (Studio Theme) --- */
             #${OVERLAY_ID} .vpa-text-main { color: hsl(200, 12%, 95.1%); }
             #${OVERLAY_ID} .vpa-text-subdued { color: hsla(0, 0%, 100%, 0.75); }
             #${OVERLAY_ID} .vpa-text-faint { color: hsla(0, 0%, 100%, 0.55); }
             #${OVERLAY_ID} .hover\\:vpa-text-main:hover { color: hsl(200, 12%, 95.1%); }
 
-            /* --- Main Window Structure & Header --- */
-            /* Styles for the main overlay window, header, and window controls */
-            /* (Many specific styles are covered by #${OVERLAY_ID} and .vfx-window-header under utility classes or specific component styles) */
-
-            /* --- Mode Switcher Styles --- */
-            /* Styles for the 'Generator' / 'Scene Extender' mode switcher buttons */
-            /* (Covered by .mode-btn and utility classes) */
-
-            /* --- Welcome Screen & Inspiration --- */
-            /* Styles for the initial welcome message and inspiration prompt cards */
-            /* (Covered by #vfx-artisan-welcome, .inspiration-card and utility classes) */
-
-            /* --- Prompt List & Items --- */
-            /* Styles for the list of generated prompts and individual prompt items, including edit areas */
-            /* (Covered by #vfx-artisan-prompt-list, .prompt-edit-area and utility classes) */
-
-            /* --- Footer & Input Area --- */
-            /* Styles for the footer section containing the main prompt input, image upload, and generation controls */
-            /* (Covered by #vfx-prompt-input-footer-wrapper and utility classes) */
-
-            /* --- Modal Styles (General & Specific) --- */
-            /* General styles for modal backdrop and container, plus specific styles for different modal types */
-            /* (Covered by #vfx-general-modal-container, #modal-inner-container and utility classes) */
-
-            /* --- Studio Themed Components (Buttons, Inputs) --- */
-            /* These define the core look and feel for interactive elements, aiming for a consistent "Studio" theme. */
-            #${OVERLAY_ID} .studio-bg-base { background-color: #0f0f0f; } /* Deepest background, e.g. window header */
-            #${OVERLAY_ID} .studio-bg-card-nested { background-color: #1a1a1a; } /* Background for cards within cards */
-            #${OVERLAY_ID} .studio-bg-elevated { background-color: #1a1a1a; } /* Standard card/modal background */
+            #${OVERLAY_ID} .studio-bg-base { background-color: #0f0f0f; }
+            #${OVERLAY_ID} .studio-bg-card-nested { background-color: #1a1a1a; }
+            #${OVERLAY_ID} .studio-bg-elevated { background-color: #1a1a1a; }
             #${OVERLAY_ID} .studio-bg-elevated-hover:hover { background-color: #2a2a2a; }
-            #${OVERLAY_ID} .studio-border-soft { border-color: #333333; } /* Softer borders for dividers */
-            #${OVERLAY_ID} .studio-border-strong { border-color: #444444; } /* Stronger borders for card outlines */
+            #${OVERLAY_ID} .studio-border-soft { border-color: #333333; }
+            #${OVERLAY_ID} .studio-border-strong { border-color: #444444; }
 
-            /* --- Studio Themed Components (Buttons, Inputs) --- */
             #${OVERLAY_ID} .studio-icon-button { background-color: transparent; color: hsla(0, 0%, 100%, 0.75); border-radius: 9999px; padding: 0.625rem; transition: all 0.15s ease-in-out; display: inline-flex; align-items: center; justify-content: center; }
             #${OVERLAY_ID} .studio-icon-button:hover { background-color: hsla(0, 0%, 100%, 0.1); color: hsl(200, 12%, 95.1%); }
             #${OVERLAY_ID} .studio-icon-button:focus-visible { outline: 2px solid #7C3AED; outline-offset: 2px; }
@@ -3098,22 +2828,16 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             #${OVERLAY_ID} .studio-input-base:focus { border-color: #7C3AED; outline: none; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.3); }
 
             #${OVERLAY_ID} select.studio-input-base { appearance: none; -webkit-appearance: none; -moz-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239CA3AF' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 1.25em; padding-right: 2.5rem; }
-            /* Styling for select options (can be browser-dependent) */
             #${OVERLAY_ID} select.studio-input-base option { background-color: #2d3748; color: hsl(200, 12%, 95.1%); }
 
-            /* Material Icon Fill Setting */
             #${OVERLAY_ID} .material-symbols-rounded.material-symbols-filled,
             #${OVERLAY_ID} .material-symbols-outlined.material-symbols-filled,
             #${OVERLAY_ID} .material-icons.material-symbols-filled {
                 font-variation-settings: 'FILL' 1;
             }
-
-            /* --- Utility Classes (Tailwind-like) --- */
-            /* This section provides a subset of TailwindCSS utility classes for rapid prototyping and consistent styling.
-               These are prefixed with #${OVERLAY_ID} to scope them and reduce conflicts. */
-            /* Positional & Display */
+            /* Tailwind-like utility classes (subset) - FIXED typos from # OVERLAY_ID} to #${OVERLAY_ID} */
             #${OVERLAY_ID} .fixed { position: fixed; } #${OVERLAY_ID} .inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
-            #${OVERLAY_ID} .z-\\[9999\\] { z-index: 9999; } #${OVERLAY_ID} .z-\\[10000\\] { z-index: 10000; } /* For modals above overlay */
+            #${OVERLAY_ID} .z-\\[9999\\] { z-index: 9999; } #${OVERLAY_ID} .z-\\[10000\\] { z-index: 10000; }
             #${OVERLAY_ID} .flex { display: flex; } #${OVERLAY_ID} .flex-col { flex-direction: column; }
             #${OVERLAY_ID} .items-center { align-items: center; } #${OVERLAY_ID} .justify-center { justify-content: center; }
             #${OVERLAY_ID} .overflow-hidden { overflow: hidden; } #${OVERLAY_ID} .sticky { position: sticky; }
@@ -3143,9 +2867,12 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             #${OVERLAY_ID} .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }
             #${OVERLAY_ID} .shadow-xl { box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); }
             #${OVERLAY_ID} .shadow-inner { box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.06); }
-            #${OVERLAY_ID} .text-lg { font-size: 1.125rem; line-height: 1.75rem; } #${OVERLAY_ID} .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
-            #${OVERLAY_ID} .text-xs { font-size: 0.75rem; line-height: 1rem; } #${OVERLAY_ID} .text-base { font-size: 1rem; line-height: 1.5rem; }
-            #${OVERLAY_ID} .text-3xl { font-size: 1.875rem; line-height: 2.25rem; } #${OVERLAY_ID} .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+            #${OVERLAY_ID} .text-lg { font-size: 1.125em; line-height: 1.75; } /* Converted from rem to em for scaling with parent */
+            #${OVERLAY_ID} .text-sm { font-size: 0.875em; line-height: 1.25; } /* Converted from rem to em */
+            #${OVERLAY_ID} .text-xs { font-size: 0.75em; line-height: 1; }    /* Converted from rem to em */
+            #${OVERLAY_ID} .text-base { font-size: 1em; line-height: 1.5; }    /* Converted from rem to em */
+            #${OVERLAY_ID} .text-3xl { font-size: 1.875em; line-height: 2.25; } /* Converted from rem to em */
+            #${OVERLAY_ID} .text-xl { font-size: 1.25em; line-height: 1.75; }  /* Converted from rem to em */
             #${OVERLAY_ID} .font-medium { font-weight: 500; } #${OVERLAY_ID} .font-semibold { font-weight: 600; } #${OVERLAY_ID} .font-normal { font-weight: 400; }
             #${OVERLAY_ID} .hidden { display: none; } #${OVERLAY_ID} .sm\\:block { } @media (min-width: 640px) { #${OVERLAY_ID} .sm\\:block { display: block; } }
             #${OVERLAY_ID} .sm\\:inline { } @media (min-width: 640px) { #${OVERLAY_ID} .sm\\:inline { display: inline; } }
@@ -3207,7 +2934,6 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             #${OVERLAY_ID} .md\\:pt-0 { } @media (min-width: 768px) { #${OVERLAY_ID} .md\\:pt-0 { padding-top: 0px; } }
             #${OVERLAY_ID} .justify-end { justify-content: flex-end; }
             #${OVERLAY_ID} .self-start { align-self: flex-start; }
-            /* .line-clamp-3 was removed as inspiration card styling handles its own line clamping. */
             #${OVERLAY_ID} .break-words { overflow-wrap: break-word; } #${OVERLAY_ID} .whitespace-pre-wrap { white-space: pre-wrap; }
             #${OVERLAY_ID} .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
             #${OVERLAY_ID} .cursor-pointer { cursor: pointer; } #${OVERLAY_ID} .cursor-help { cursor: help; } #${OVERLAY_ID} .cursor-not-allowed { cursor: not-allowed; }
@@ -3237,42 +2963,29 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             #${OVERLAY_ID} .border-red-600 { border-color: #DC2626; }
             #${OVERLAY_ID} .hover\\:bg-purple-500\\/10:hover { background-color: rgba(168, 85, 247, 0.1); }
             #${OVERLAY_ID} .italic { font-style: italic; }
+            #${OVERLAY_ID} .animate-spin { animation: spin 1s linear infinite; }
+            #${OVERLAY_ID} @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-            /* --- Specific Component Styles --- */
-            /* Styles for smaller, specific components not covered by broader categories or utilities. */
-
-            /* Info Tooltip */
+           /* Info Tooltip Specific styling (can be enhanced) */
             #${OVERLAY_ID} .info-tooltip-trigger { display: inline-flex; }
 
-            /* Styling for the Tools dropdown items */
-            #${OVERLAY_ID} .vfx-tool-item {
-                display: block; /* Make it block to take full width */
-                width: 100%;
-                padding: 0.625rem 1rem;
-                text-align: left;
-                color: hsl(200, 12%, 95.1%);
-                background-color: transparent;
-                border: none;
-                cursor: pointer;
-                font-size: 0.875rem;
+            /* Styles for the new Tools Dropdown */
+            #${OVERLAY_ID} #vfx-tools-dropdown .vfx-tool-item .material-symbols-outlined,
+            #${OVERLAY_ID} #vfx-tools-dropdown .vfx-tool-item svg { /* For SVG icons */
+                vertical-align: text-bottom; /* Align icons better with text */
+                margin-right: 0.5rem; /* Ensure spacing for all icons */
+                width: 1.125rem; /* 18px */
+                height: 1.125rem; /* 18px */
             }
-            #${OVERLAY_ID} .vfx-tool-item:hover {
-                background-color: hsla(0, 0%, 100%, 0.1);
+            #${OVERLAY_ID} #vfx-tools-menu-btn .material-symbols-outlined,
+            #${OVERLAY_ID} #vfx-tools-menu-btn svg {
+                 vertical-align: middle; /* Align icons in button */
             }
-             #${OVERLAY_ID} .vfx-tool-item:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
-            /* Icon alignment within tool items (buttons are already flex items-center, so mr-2 on icon span is main spacer) */
-            #${OVERLAY_ID} .vfx-tool-item .material-symbols-outlined,
-            #${OVERLAY_ID} .vfx-tool-item .material-icons {
-                vertical-align: middle; /* Good fallback if flex alignment is overridden */
+             #${OVERLAY_ID} #vfx-tools-dropdown {
+                z-index: 55; /* Increased z-index for dropdown to be above sticky header */
             }
 
-            /* --- Resize Handles & Toggle Button --- */
-            /* Styles for the window resize handles and the main UI toggle button. */
 
-            /* Main Toggle Button for the UI */
             #${TOGGLE_BUTTON_ID} {
               position: fixed;
               bottom: 20px;
@@ -3294,7 +3007,7 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                 width: 1.75rem; height: 1.75rem; fill: #A78BFA; /* text-purple-400 */
             }
             #${TOGGLE_BUTTON_ID} > span { /* If icon is span */
-                font-size: 1.75rem; color: #A78BFA;
+                font-size: 1.75em; color: #A78BFA; /* Converted from rem to em */
             }
         `);
         // Font imports
@@ -3305,431 +3018,178 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         
         // Additional fixes for text color and alignment
         GM_addStyle(`
-            /* --- Global Overlay & Font Styles --- */
-            /* These are foundational styles for the entire overlay. */
-            #${OVERLAY_ID} {
-                font-family: 'Google Sans Text', 'Google Sans', 'Space Grotesk', sans-serif;
-                background-color: #121212; /* Base background for the entire overlay */
-                color: hsl(200, 12%, 95.1%); /* Default text color */
-                -webkit-font-smoothing: antialiased;
-                -moz-osx-font-smoothing: grayscale;
-                overflow: hidden; /* Prevent content spill during animations/resize */
-            }
-            #${OVERLAY_ID} .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
-            #${OVERLAY_ID} .custom-scrollbar::-webkit-scrollbar-track { background: hsla(0, 0%, 100%, 0.05); border-radius:4px; }
-            #${OVERLAY_ID} .custom-scrollbar::-webkit-scrollbar-thumb { background: hsla(0, 0%, 100%, 0.2); border-radius: 4px; }
-            #${OVERLAY_ID} .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: hsla(0, 0%, 100%, 0.3); }
-            
-            /* --- Animations --- */
-            /* Keyframe definitions for UI animations. */
-            #${OVERLAY_ID} @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-            #${OVERLAY_ID} .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
-            #${OVERLAY_ID} @keyframes popIn { 0% { opacity: 0; transform: scale(0.95) translateY(10px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
-            #${OVERLAY_ID} .animate-popIn { animation: popIn 0.3s ease-out forwards; }
-            #${OVERLAY_ID} .animate-spin { animation: spin 1s linear infinite; }
-            #${OVERLAY_ID} @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
-            /* --- Base Text & Background Styles (Studio Theme) --- */
-            #${OVERLAY_ID} .vpa-text-main { color: hsl(200, 12%, 95.1%); }
-            #${OVERLAY_ID} .vpa-text-subdued { color: hsla(0, 0%, 100%, 0.75); }
-            #${OVERLAY_ID} .vpa-text-faint { color: hsla(0, 0%, 100%, 0.55); }
-            #${OVERLAY_ID} .hover\\:vpa-text-main:hover { color: hsl(200, 12%, 95.1%); }
-
-            /* --- Main Window Structure & Header --- */
-            /* Styles for the main overlay window, header, and window controls */
-            /* (Many specific styles are covered by #${OVERLAY_ID} and .vfx-window-header under utility classes or specific component styles) */
-
-            /* --- Mode Switcher Styles --- */
-            /* Styles for the 'Generator' / 'Scene Extender' mode switcher buttons */
-            /* (Covered by .mode-btn and utility classes) */
-
-            /* --- Welcome Screen & Inspiration --- */
-            /* Styles for the initial welcome message and inspiration prompt cards */
-            /* (Covered by #vfx-artisan-welcome, .inspiration-card and utility classes) */
-            
-            /* --- Prompt List & Items --- */
-            /* Styles for the list of generated prompts and individual prompt items, including edit areas */
-            /* (Covered by #vfx-artisan-prompt-list, .prompt-edit-area and utility classes) */
-
-            /* --- Footer & Input Area --- */
-            /* Styles for the footer section containing the main prompt input, image upload, and generation controls */
-            /* (Covered by #vfx-prompt-input-footer-wrapper and utility classes) */
-
-            /* --- Modal Styles (General & Specific) --- */
-            /* General styles for modal backdrop and container, plus specific styles for different modal types */
-            /* (Covered by #vfx-general-modal-container, #modal-inner-container and utility classes) */
-            
-            /* --- Studio Themed Components (Buttons, Inputs) --- */
-            /* These define the core look and feel for interactive elements, aiming for a consistent "Studio" theme. */
-            #${OVERLAY_ID} .studio-bg-base { background-color: #0f0f0f; } /* Deepest background, e.g. window header */
-            #${OVERLAY_ID} .studio-bg-card-nested { background-color: #1a1a1a; } /* Background for cards within cards */
-            #${OVERLAY_ID} .studio-bg-elevated { background-color: #1a1a1a; } /* Standard card/modal background */
-            #${OVERLAY_ID} .studio-bg-elevated-hover:hover { background-color: #2a2a2a; }
-            #${OVERLAY_ID} .studio-border-soft { border-color: #333333; } /* Softer borders for dividers */
-            #${OVERLAY_ID} .studio-border-strong { border-color: #444444; } /* Stronger borders for card outlines */
-
-            /* --- Studio Themed Components (Buttons, Inputs) --- */
-            #${OVERLAY_ID} .studio-icon-button { background-color: transparent; color: hsla(0, 0%, 100%, 0.75); border-radius: 9999px; padding: 0.625rem; transition: all 0.15s ease-in-out; display: inline-flex; align-items: center; justify-content: center; }
-            #${OVERLAY_ID} .studio-icon-button:hover { background-color: hsla(0, 0%, 100%, 0.1); color: hsl(200, 12%, 95.1%); }
-            #${OVERLAY_ID} .studio-icon-button:focus-visible { outline: 2px solid #7C3AED; outline-offset: 2px; }
-            #${OVERLAY_ID} .studio-icon-button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-            #${OVERLAY_ID} .studio-button-primary { background-color: #7C3AED; color: #FFFFFF; padding: 0.625rem 1.25rem; border-radius: 0.5rem; font-weight: 500; }
-            #${OVERLAY_ID} .studio-button-primary:hover { background-color: #6D28D9; }
-            #${OVERLAY_ID} .studio-button-primary:disabled { background-color: #553c7b; opacity: 0.6; cursor: not-allowed; }
-
-            #${OVERLAY_ID} .studio-button-secondary { background-color: hsla(0, 0%, 100%, 0.08); color: hsl(200, 12%, 95.1%); border: 1px solid hsla(0, 0%, 100%, 0.15); padding: 0.5rem 1rem; border-radius: 0.375rem; font-weight: 500;}
-            #${OVERLAY_ID} .studio-button-secondary:hover { background-color: hsla(0, 0%, 100%, 0.12); border-color: hsla(0, 0%, 100%, 0.25); }
-            #${OVERLAY_ID} .studio-button-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-            #${OVERLAY_ID} .studio-input-base { background-color: #111827; border: 1px solid #374151; color: hsl(200, 12%, 95.1%); border-radius: 0.375rem; padding: 0.625rem; width: 100%; }
-            #${OVERLAY_ID} .studio-input-base:focus { border-color: #7C3AED; outline: none; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.3); }
-
-            #${OVERLAY_ID} select.studio-input-base { appearance: none; -webkit-appearance: none; -moz-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239CA3AF' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 1.25em; padding-right: 2.5rem; }
-            /* Styling for select options (can be browser-dependent) */
-            #${OVERLAY_ID} select.studio-input-base option { background-color: #2d3748; color: hsl(200, 12%, 95.1%); }
-
-            /* Material Icon Fill Setting */
-            #${OVERLAY_ID} .material-symbols-rounded.material-symbols-filled,
-            #${OVERLAY_ID} .material-symbols-outlined.material-symbols-filled,
-            #${OVERLAY_ID} .material-icons.material-symbols-filled {
-                font-variation-settings: 'FILL' 1;
+            /* Fix text color in input fields */
+            .vfx-floating-window input,
+            .vfx-floating-window textarea,
+            .vfx-floating-window select {
+                color: #ffffff !important;
+                background-color: rgba(255, 255, 255, 0.1) !important;
+                border: 1px solid rgba(255, 255, 255, 0.2) !important;
             }
             
-            /* --- Utility Classes (Tailwind-like) --- */
-            /* This section provides a subset of TailwindCSS utility classes for rapid prototyping and consistent styling.
-               These are prefixed with #${OVERLAY_ID} to scope them and reduce conflicts. */
-            /* Positional & Display */
-            #${OVERLAY_ID} .fixed { position: fixed; } #${OVERLAY_ID} .inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
-            #${OVERLAY_ID} .z-\\[9999\\] { z-index: 9999; } #${OVERLAY_ID} .z-\\[10000\\] { z-index: 10000; } /* For modals above overlay */
-            #${OVERLAY_ID} .flex { display: flex; } #${OVERLAY_ID} .flex-col { flex-direction: column; }
-            #${OVERLAY_ID} .items-center { align-items: center; } #${OVERLAY_ID} .justify-center { justify-content: center; }
-            #${OVERLAY_ID} .overflow-hidden { overflow: hidden; } #${OVERLAY_ID} .sticky { position: sticky; }
-            #${OVERLAY_ID} .top-0 { top: 0; } #${OVERLAY_ID} .bottom-0 { bottom: 0; }
-            #${OVERLAY_ID} .w-full { width: 100%; } #${OVERLAY_ID} .h-12 { height: 3rem; } #${OVERLAY_ID} .h-6 { height: 1.5rem; } #${OVERLAY_ID} .w-6 { width: 1.5rem; }
-            #${OVERLAY_ID} .h-5 { height: 1.25rem; } #${OVERLAY_ID} .w-5 { width: 1.25rem; } #${OVERLAY_ID} .h-4 { height: 1rem; } #${OVERLAY_ID} .w-4 { width: 1rem; }
-            #${OVERLAY_ID} .p-1 { padding: 0.25rem; } #${OVERLAY_ID} .p-1\\.5 { padding: 0.375rem; } #${OVERLAY_ID} .p-2 { padding: 0.5rem; } #${OVERLAY_ID} .p-3 { padding: 0.75rem; } #${OVERLAY_ID} .p-4 { padding: 1rem; }
-            #${OVERLAY_ID} .px-4 { padding-left: 1rem; padding-right: 1rem; } #${OVERLAY_ID} .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
-            #${OVERLAY_ID} .sm\\:px-6 { } @media (min-width: 640px) { #${OVERLAY_ID} .sm\\:px-6 { padding-left: 1.5rem; padding-right: 1.5rem; } }
-            #${OVERLAY_ID} .md\\:px-8 { } @media (min-width: 768px) { #${OVERLAY_ID} .md\\:px-8 { padding-left: 2rem; padding-right: 2rem; } }
-            #${OVERLAY_ID} .pt-4 { padding-top: 1rem; } #${OVERLAY_ID} .sm\\:pt-2 { } @media (min-width: 640px) { #${OVERLAY_ID} .sm\\:pt-2 { padding-top: 0.5rem; } }
-            #${OVERLAY_ID} .md\\:pt-4 { } @media (min-width: 768px) { #${OVERLAY_ID} .md\\:pt-4 { padding-top: 1rem; } }
-            #${OVERLAY_ID} .max-w-7xl { max-width: 80rem; } #${OVERLAY_ID} .max-w-4xl { max-width: 56rem; } #${OVERLAY_ID} .max-w-3xl { max-width: 48rem; }
-            #${OVERLAY_ID} .max-w-2xl { max-width: 42rem; } #${OVERLAY_ID} .max-w-lg { max-width: 32rem; } #${OVERLAY_ID} .max-w-md { max-width: 28rem; }
-            #${OVERLAY_ID} .mx-auto { margin-left: auto; margin-right: auto; }
-            #${OVERLAY_ID} .space-x-1 > :not([hidden]) ~ :not([hidden]) { margin-left: calc(0.25rem * calc(1 - 0)); margin-right: calc(0.25rem * 0); }
-            #${OVERLAY_ID} .space-x-2 > :not([hidden]) ~ :not([hidden]) { margin-left: calc(0.5rem * calc(1 - 0)); margin-right: calc(0.5rem * 0); }
-            #${OVERLAY_ID} .sm\\:space-x-2 > :not([hidden]) ~ :not([hidden]) { } @media (min-width: 640px) { #${OVERLAY_ID} .sm\\:space-x-2 > :not([hidden]) ~ :not([hidden]) { margin-left: calc(0.5rem * calc(1 - 0)); margin-right: calc(0.5rem * 0); } }
-            #${OVERLAY_ID} .space-x-3 > :not([hidden]) ~ :not([hidden]) { margin-left: calc(0.75rem * calc(1 - 0)); margin-right: calc(0.75rem * 0); }
-            #${OVERLAY_ID} .space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(0.75rem * calc(1 - 0)); margin-bottom: calc(0.75rem * 0); }
-            #${OVERLAY_ID} .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(1rem * calc(1 - 0)); margin-bottom: calc(1rem * 0); }
-            #${OVERLAY_ID} .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(1.5rem * calc(1 - 0)); margin-bottom: calc(1.5rem * 0); }
-            #${OVERLAY_ID} .space-y-12 > :not([hidden]) ~ :not([hidden]) { margin-top: calc(3rem * calc(1 - 0)); margin-bottom: calc(3rem * 0); }
-            #${OVERLAY_ID} .border-b { border-bottom-width: 1px; } #${OVERLAY_ID} .border-t { border-top-width: 1px; } #${OVERLAY_ID} .border { border-width: 1px; }
-            #${OVERLAY_ID} .rounded-lg { border-radius: 0.5rem; } #${OVERLAY_ID} .rounded-xl { border-radius: 0.75rem; } #${OVERLAY_ID} .rounded-md { border-radius: 0.375rem; } #${OVERLAY_ID} .rounded-full { border-radius: 9999px; } #${OVERLAY_ID} .rounded { border-radius: 0.25rem; }
-            #${OVERLAY_ID} .shadow-md { box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); }
-            #${OVERLAY_ID} .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }
-            #${OVERLAY_ID} .shadow-xl { box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); }
-            #${OVERLAY_ID} .shadow-inner { box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.06); }
-            #${OVERLAY_ID} .text-lg { font-size: 1.125rem; line-height: 1.75rem; } #${OVERLAY_ID} .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
-            #${OVERLAY_ID} .text-xs { font-size: 0.75rem; line-height: 1rem; } #${OVERLAY_ID} .text-base { font-size: 1rem; line-height: 1.5rem; }
-            #${OVERLAY_ID} .text-3xl { font-size: 1.875rem; line-height: 2.25rem; } #${OVERLAY_ID} .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
-            #${OVERLAY_ID} .font-medium { font-weight: 500; } #${OVERLAY_ID} .font-semibold { font-weight: 600; } #${OVERLAY_ID} .font-normal { font-weight: 400; }
-            #${OVERLAY_ID} .hidden { display: none; } #${OVERLAY_ID} .sm\\:block { } @media (min-width: 640px) { #${OVERLAY_ID} .sm\\:block { display: block; } }
-            #${OVERLAY_ID} .sm\\:inline { } @media (min-width: 640px) { #${OVERLAY_ID} .sm\\:inline { display: inline; } }
-            #${OVERLAY_ID} .sm\\:inline-flex { } @media (min-width: 640px) { #${OVERLAY_ID} .sm\\:inline-flex { display: inline-flex; } }
-            #${OVERLAY_ID} .opacity-90 { opacity: 0.9; } #${OVERLAY_ID} .opacity-75 { opacity: 0.75; }
-            #${OVERLAY_ID} .text-purple-500 { color: #8B5CF6; } #${OVERLAY_ID} .text-purple-400 { color: #A78BFA; } #${OVERLAY_ID} .text-purple-300 { color: #C4B5FD; }
-            #${OVERLAY_ID} .text-yellow-400 { color: #FACC15; } #${OVERLAY_ID} .text-green-400 { color: #4ADE80; }
-            #${OVERLAY_ID} .text-red-100 { color: #FEE2E2; } #${OVERLAY_ID} .text-red-200 { color: #FECACA; }
-            #${OVERLAY_ID} .bg-slate-700 { background-color: #334155; } #${OVERLAY_ID} .hover\\:bg-slate-600:hover { background-color: #475569; }
-            #${OVERLAY_ID} .text-slate-300 { color: #CBD5E1; } #${OVERLAY_ID} .hover\\:text-white:hover { color: #FFFFFF; }
-            #${OVERLAY_ID} .bg-purple-600 { background-color: #7C3AED; } #${OVERLAY_ID} .hover\\:bg-purple-700:hover { background-color: #6D28D9; }
-            #${OVERLAY_ID} .border-purple-600 { border-color: #7C3AED; }
-            #${OVERLAY_ID} .text-white { color: #FFFFFF; } #${OVERLAY_ID} .bg-black { background-color: #000000; }
-            #${OVERLAY_ID} .bg-opacity-50 { background-color: rgba(0,0,0,0.5); } #${OVERLAY_ID} .bg-opacity-80 { background-color: rgba(0,0,0,0.8); }
-            #${OVERLAY_ID} .backdrop-blur-md { backdrop-filter: blur(12px); } #${OVERLAY_ID} .backdrop-blur-sm { backdrop-filter: blur(4px); }
-            #${OVERLAY_ID} .flex-1 { flex: 1 1 0%; } #${OVERLAY_ID} .flex-grow { flex-grow: 1; } #${OVERLAY_ID} .shrink-0 { flex-shrink: 0; }
-            #${OVERLAY_ID} .focus\\:outline-none:focus { outline: 2px solid transparent; outline-offset: 2px; }
-            #${OVERLAY_ID} .focus\\:ring-2:focus { --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color); --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color); box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000); }
-            #${OVERLAY_ID} .focus\\:ring-purple-500:focus { --tw-ring-color: #8B5CF6; }
-            #${OVERLAY_ID} .focus\\:ring-opacity-75:focus { --tw-ring-opacity: 0.75; }
-            #${OVERLAY_ID} .focus\\:ring-offset-2:focus { --tw-ring-offset-width: 2px; }
-            #${OVERLAY_ID} .focus\\:ring-offset-gray-800:focus { --tw-ring-offset-color: #1F2937; }
-            #${OVERLAY_ID} .focus\\:ring-offset-black:focus { --tw-ring-offset-color: #000000; }
-            #${OVERLAY_ID} .focus\\:border-purple-500:focus { border-color: #8B5CF6; }
-            #${OVERLAY_ID} .transition-all { transition-property: all; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
-            #${OVERLAY_ID} .transition-colors { transition-property: background-color, border-color, color, fill, stroke; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
-            #${OVERLAY_ID} .transition-transform { transition-property: transform; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
-            #${OVERLAY_ID} .duration-150 { transition-duration: 150ms; } #${OVERLAY_ID} .duration-200 { transition-duration: 200ms; }
-            #${OVERLAY_ID} .ease-in-out { transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
-            #${OVERLAY_ID} .transform { transform: translateX(0) translateY(0) rotate(0) skewX(0) skewY(0) scaleX(1) scaleY(1); }
-            #${OVERLAY_ID} .hover\\:scale-105:hover { --tw-scale-x: 1.05; --tw-scale-y: 1.05; transform: translateX(0) translateY(0) rotate(0) skewX(0) skewY(0) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y)); }
-            #${OVERLAY_ID} .hover\\:-translate-y-1:hover { --tw-translate-y: -0.25rem; transform: translateX(0) translateY(var(--tw-translate-y)) rotate(0) skewX(0) skewY(0) scaleX(1) scaleY(1); }
-            #${OVERLAY_ID} .translate-x-6 { --tw-translate-x: 1.5rem; transform: translateX(var(--tw-translate-x)) translateY(0) rotate(0) skewX(0) skewY(0) scaleX(1) scaleY(1); }
-            #${OVERLAY_ID} .translate-x-1 { --tw-translate-x: 0.25rem; transform: translateX(var(--tw-translate-x)) translateY(0) rotate(0) skewX(0) skewY(0) scaleX(1) scaleY(1); }
-            #${OVERLAY_ID} .group:hover .group-hover\\:translate-x-1 { --tw-translate-x: 0.25rem; transform: translateX(var(--tw-translate-x)) translateY(0) rotate(0) skewX(0) skewY(0) scaleX(1) scaleY(1); }
-            #${OVERLAY_ID} .absolute { position: absolute; } #${OVERLAY_ID} .relative { position: relative; }
-            #${OVERLAY_ID} .right-2\\.5 { right: 0.625rem; } #${OVERLAY_ID} .top-1\\/2 { top: 50%; }
-            #${OVERLAY_ID} .-translate-y-1\\/2 { --tw-translate-y: -50%; transform: translateX(0) translateY(var(--tw-translate-y)) rotate(0) skewX(0) skewY(0) scaleX(1) scaleY(1); }
-            #${OVERLAY_ID} .text-center { text-align: center; } #${OVERLAY_ID} .text-left { text-align: left; }
-            #${OVERLAY_ID} .leading-tight { line-height: 1.25; } #${OVERLAY_ID} .leading-relaxed { line-height: 1.625; }
-            #${OVERLAY_ID} .resize-none { resize: none; } #${OVERLAY_ID} .resize-y { resize: vertical; }
-            #${OVERLAY_ID} .overflow-y-auto { overflow-y: auto; }
-            #${OVERLAY_ID} .object-cover { object-fit: cover; } #${OVERLAY_ID} .object-contain { object-fit: contain; }
-            #${OVERLAY_ID} .mr-3 { margin-right: 0.75rem; } #${OVERLAY_ID} .ml-2 { margin-left: 0.5rem; } #${OVERLAY_ID} .mr-2 { margin-right: 0.5rem; }
-            #${OVERLAY_ID} .mr-2\\.5 { margin-right: 0.625rem; }
-            #${OVERLAY_ID} .mb-1 { margin-bottom: 0.25rem; } #${OVERLAY_ID} .mb-2 { margin-bottom: 0.5rem; } #${OVERLAY_ID} .mb-3 { margin-bottom: 0.75rem; }
-            #${OVERLAY_ID} .mb-4 { margin-bottom: 1rem; } #${OVERLAY_ID} .mb-5 { margin-bottom: 1.25rem; } #${OVERLAY_ID} .mb-6 { margin-bottom: 1.5rem; } #${OVERLAY_ID} .mb-8 { margin-bottom: 2rem; }
-            #${OVERLAY_ID} .mt-2 { margin-top: 0.5rem; } #${OVERLAY_ID} .mt-3 { margin-top: 0.75rem; } #${OVERLAY_ID} .mt-4 { margin-top: 1rem; }
-            #${OVERLAY_ID} .md\\:col-span-2 { } @media (min-width: 768px) { #${OVERLAY_ID} .md\\:col-span-2 { grid-column: span 2 / span 2; } }
-            #${OVERLAY_ID} .lg\\:col-span-1 { } @media (min-width: 1024px) { #${OVERLAY_ID} .lg\\:col-span-1 { grid-column: span 1 / span 1; } }
-            #${OVERLAY_ID} .lg\\:col-span-3 { } @media (min-width: 1024px) { #${OVERLAY_ID} .lg\\:col-span-3 { grid-column: span 3 / span 3; } }
-            #${OVERLAY_ID} .md\\:col-start-1 { } @media (min-width: 768px) { #${OVERLAY_ID} .md\\:col-start-1 { grid-column-start: 1; } }
-            #${OVERLAY_ID} .lg\\:col-start-1 { } @media (min-width: 1024px) { #${OVERLAY_ID} .lg\\:col-start-1 { grid-column-start: 1; } }
-            #${OVERLAY_ID} .grid { display: grid; } #${OVERLAY_ID} .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
-            #${OVERLAY_ID} .md\\:grid-cols-2 { } @media (min-width: 768px) { #${OVERLAY_ID} .md\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-            #${OVERLAY_ID} .lg\\:grid-cols-3 { } @media (min-width: 1024px) { #${OVERLAY_ID} .lg\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-            #${OVERLAY_ID} .gap-4 { gap: 1rem; } #${OVERLAY_ID} .gap-x-4 { column-gap: 1rem; } #${OVERLAY_ID} .gap-y-3 { row-gap: 0.75rem; }
-            #${OVERLAY_ID} .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
-            #${OVERLAY_ID} .md\\:pt-0 { } @media (min-width: 768px) { #${OVERLAY_ID} .md\\:pt-0 { padding-top: 0px; } }
-            #${OVERLAY_ID} .justify-end { justify-content: flex-end; }
-            #${OVERLAY_ID} .self-start { align-self: flex-start; }
-            /* .line-clamp-3 was removed as inspiration card styling handles its own line clamping. */
-            #${OVERLAY_ID} .break-words { overflow-wrap: break-word; } #${OVERLAY_ID} .whitespace-pre-wrap { white-space: pre-wrap; }
-            #${OVERLAY_ID} .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-            #${OVERLAY_ID} .cursor-pointer { cursor: pointer; } #${OVERLAY_ID} .cursor-help { cursor: help; } #${OVERLAY_ID} .cursor-not-allowed { cursor: not-allowed; }
-            #${OVERLAY_ID} .select-none { user-select: none; }
-            #${OVERLAY_ID} .max-h-\\[90vh\\] { max-height: 90vh; } #${OVERLAY_ID} .max-h-\\[60vh\\] { max-height: 60vh; } #${OVERLAY_ID} .max-h-\\[50vh\\] { max-height: 50vh; } #${OVERLAY_ID} .max-h-40 { max-height: 10rem; } #${OVERLAY_ID} .max-h-32 { max-height: 8rem; }
-            #${OVERLAY_ID} .pr-2 { padding-right: 0.5rem; }
-            #${OVERLAY_ID} .list-disc { list-style-type: disc; } #${OVERLAY_ID} .list-inside { list-style-position: inside; } #${OVERLAY_ID} .pl-1 { padding-left: 0.25rem; } #${OVERLAY_ID} .pl-2 { padding-left: 0.5rem; }
-            #${OVERLAY_ID} .hover\\:bg-orange-600:hover { background-color: #EA580C; }
-            #${OVERLAY_ID} .hover\\:bg-sky-600:hover { background-color: #0284C7; }
-            #${OVERLAY_ID} .hover\\:bg-pink-600:hover { background-color: #DB2777; }
-            #${OVERLAY_ID} .hover\\:bg-lime-600:hover { background-color: #65A30D; }
-            #${OVERLAY_ID} .hover\\:bg-teal-600:hover { background-color: #0D9488; }
-            #${OVERLAY_ID} .hover\\:bg-blue-600:hover { background-color: #2563EB; }
-            #${OVERLAY_ID} .hover\\:bg-green-500:hover { background-color: #22C55E; }
-            #${OVERLAY_ID} .hover\\:bg-red-500:hover { background-color: #EF4444; }
-            #${OVERLAY_ID} .hover\\:bg-green-700:hover { background-color: #15803D; }
-            #${OVERLAY_ID} .hover\\:border-green-600:hover { border-color: #16A34A; }
-            #${OVERLAY_ID} .hover\\:border-purple-600:hover { border-color: #7C3AED; }
-            #${OVERLAY_ID} .bg-green-600 { background-color: #16A34A; }
-            #${OVERLAY_ID} .bg-red-600 { background-color: #DC2626; }
-            #${OVERLAY_ID} .bg-red-700 { background-color: #B91C1C; }
-            #${OVERLAY_ID} .bg-opacity-20 { background-color: rgba(var(--tw-bg-opacity-base,0),var(--tw-bg-opacity-base,0),var(--tw-bg-opacity-base,0),0.2); } /* Needs color vars for actual color */
-            #${OVERLAY_ID} .bg-red-700.bg-opacity-20 { background-color: rgba(185,28,28,0.2); } /* Specific example */
-            #${OVERLAY_ID} .bg-blue-700.bg-opacity-20 { background-color: rgba(29,78,216,0.2); }
-            #${OVERLAY_ID} .text-red-200 { color: #FECACA; }
-            #${OVERLAY_ID} .text-blue-200 { color: #BFDBFE; }
-            #${OVERLAY_ID} .border-red-600 { border-color: #DC2626; }
-            #${OVERLAY_ID} .hover\\:bg-purple-500\\/10:hover { background-color: rgba(168, 85, 247, 0.1); }
-            #${OVERLAY_ID} .italic { font-style: italic; }
-            #${OVERLAY_ID} .animate-spin { animation: spin 1s linear infinite; }
-            #${OVERLAY_ID} @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
-            /* --- Specific Component Styles --- */
-            /* Styles for smaller, specific components not covered by broader categories or utilities. */
-
-           /* Info Tooltip Specific styling (can be enhanced) */
-            #${OVERLAY_ID} .info-tooltip-trigger { display: inline-flex; }
-
-            /* Styling for the Tools dropdown items */
-            #${OVERLAY_ID} .vfx-tool-item {
-                display: block;
-                width: 100%;
-                padding: 0.625rem 1rem; /* Similar to studio-button-secondary but full width */
-                text-align: left;
-                color: hsl(200, 12%, 95.1%); /* vpa-text-main */
-                background-color: transparent;
-                border: none;
-                cursor: pointer;
-                font-size: 0.875rem; /* text-sm */
-            }
-            #${OVERLAY_ID} .vfx-tool-item:hover {
-                background-color: hsla(0, 0%, 100%, 0.1); /* Similar to studio-icon-button hover */
-            }
-             #${OVERLAY_ID} .vfx-tool-item:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
-            #${OVERLAY_ID} .vfx-tool-item .material-symbols-outlined,
-            #${OVERLAY_ID} .vfx-tool-item .material-icons { /* For icon alignment in buttons */
-                vertical-align: middle;
-            }
-
-            /* --- Resize Handles & Toggle Button --- */
-            /* Styles for the window resize handles and the main UI toggle button. */
-
-            #${TOGGLE_BUTTON_ID} {
-              position: fixed;
-              bottom: 20px;
-              right: 20px;
-              z-index: 99999; /* Ensure it's above other page content and the overlay */
-              padding: 0.75rem;
-              background-color: #1F2937; /* studio-bg-elevated or similar dark */
-              border: 1px solid #7C3AED; /* studio-border-strong with accent */
-              border-radius: 9999px; /* full */
-              box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-              cursor: pointer;
-              transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
-            }
-            #${TOGGLE_BUTTON_ID}:hover {
-              background-color: #374151; /* Slightly lighter dark */
-              transform: scale(1.1);
-            }
-            #${TOGGLE_BUTTON_ID} > svg { /* If icon is SVG */
-                width: 1.75rem; height: 1.75rem; fill: #A78BFA; /* text-purple-400 */
-            }
-            #${TOGGLE_BUTTON_ID} > span { /* If icon is span */
-                font-size: 1.75rem; color: #A78BFA;
-            }
-        `);
-        // Font imports
-        GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Google+Sans+Text:wght@400;500;700&family=Google+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap');");
-        GM_addStyle("@import url('https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Outlined|Material+Icons+Round|Material+Icons+Sharp|Material+Icons+Two+Tone');");
-        GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');");
-        GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');");
-
-        // Additional fixes for text color and alignment
-        GM_addStyle(`
-            /* --- Critical Overrides & Fixes --- */
-            /* These rules often use !important to ensure they override potentially conflicting styles from the host page. */
-
-            /* Default styling for form elements to ensure readability against dark theme, may conflict with site styles */
-            #${OVERLAY_ID} input,
-            #${OVERLAY_ID} textarea,
-            #${OVERLAY_ID} select {
-                color: #ffffff; /* Ensure text is white for readability */
-                background-color: rgba(255, 255, 255, 0.1); /* Slightly transparent white for inputs */
-                border: 1px solid rgba(255, 255, 255, 0.2); /* Subtle border */
-            }
-            
-            /* Placeholder text color */
-            #${OVERLAY_ID} input::placeholder,
-            #${OVERLAY_ID} textarea::placeholder {
-                /* !important: Placeholder color is notoriously difficult to override due to browser styles. */
+            .vfx-floating-window input::placeholder,
+            .vfx-floating-window textarea::placeholder {
                 color: rgba(255, 255, 255, 0.6) !important;
             }
             
-            /* Remove any blur effects from the main overlay if they interfere */
-            #${OVERLAY_ID} {
-                /* backdrop-filter: none !important; */ /* Example: only use if site's backdrop is an issue */
-                /* filter: none !important; */  /* Example: only use if site's filter is an issue */
-                /* !important: Ensures the overlay itself remains interactive, overriding any potential site-wide pointer-events: none. */
+            /* Remove any blur effects */
+            .vfx-floating-window {
+                backdrop-filter: none !important;
+                filter: none !important;
+                pointer-events: auto !important;
+            }
+
+            /* Ensure all interactive elements are clickable */
+            .vfx-floating-window button,
+            .vfx-floating-window input,
+            .vfx-floating-window textarea,
+            .vfx-floating-window select,
+            .vfx-floating-window a {
+                pointer-events: auto !important;
+                cursor: pointer !important;
+            }
+
+            /* Fix icon sizes to match reference */
+            .vfx-floating-window .w-12 {
+                width: 3rem !important;
+                height: 3rem !important;
+            }
+            
+            .vfx-floating-window .h-12 {
+                height: 3rem !important;
+            }
+            
+            /* Improve layout alignment */
+            .vfx-floating-window .flex {
+                display: flex !important;
+            }
+            
+            .vfx-floating-window .items-center {
+                align-items: center !important;
+            }
+            
+            .vfx-floating-window .justify-center {
+                justify-content: center !important;
+            }
+            
+            /* Fix button text colors */
+            .vfx-floating-window button {
+                color: inherit !important;
+            }
+            
+            /* Fix select dropdown text */
+            .vfx-floating-window select option {
+                background-color: #1f2937 !important;
+                color: #ffffff !important;
+            }
+            
+            /* Ensure clean, sharp appearance */
+            .vfx-floating-window * {
+                filter: none !important;
+                backdrop-filter: none !important;
                 pointer-events: auto !important;
             }
             
-            /* Ensure all interactive elements within the overlay are clickable by default */
-            #${OVERLAY_ID} button,
-            #${OVERLAY_ID} input,
-            #${OVERLAY_ID} textarea,
-            #${OVERLAY_ID} select,
-            #${OVERLAY_ID} a {
-                pointer-events: auto ; /* Ensures elements within the overlay are interactive */
-                cursor: pointer ; /* Default cursor for clickable items */
+            /* Make sure the window content is interactive */
+            .vfx-floating-window .vfx-window-content {
+                pointer-events: auto !important;
+            }
+
+            /* Ensure buttons are properly styled and clickable */
+            .vfx-floating-window button:hover {
+                opacity: 0.8 !important;
             }
             
-            /* Utility classes for icon sizes - !important can be acceptable for highly specific utilities */
-            /* !important: These are utility classes for fixed sizing; overriding them would break visual consistency. */
-            #${OVERLAY_ID} .w-12 { width: 3rem !important; height: 3rem !important; }
-            #${OVERLAY_ID} .h-12 { height: 3rem !important; }
-            
-            /* Utility classes for layout - !important can be acceptable for foundational layout utilities */
-            /* !important: Core display properties for flex layout utilities. */
-            #${OVERLAY_ID} .flex { display: flex !important; }
-            #${OVERLAY_ID} .items-center { align-items: center !important; }
-            #${OVERLAY_ID} .justify-center { justify-content: center !important; }
-            
-            /* Broad button text color override - use with caution, prefer specific button class styling */
-            /* #${OVERLAY_ID} button { color: inherit !important; } */ /* Commented out: Prefer .studio-button-* color definitions */
-            
-            /* Select dropdown options styling */
-            #${OVERLAY_ID} select option {
-                background-color: #1f2937; /* Dark background for options for readability */
-                color: #ffffff; /* White text for options */
+            /* Prevent any unwanted overlays */
+            .vfx-floating-window #vfx-general-modal-container {
+                background: none !important;
+                backdrop-filter: none !important;
+                pointer-events: none !important;
             }
             
-            /* Button hover opacity - apply to specific classes if possible */
-            #${OVERLAY_ID} .studio-button-primary:hover,
-            #${OVERLAY_ID} .studio-button-secondary:hover,
-            #${OVERLAY_ID} .studio-icon-button:hover,
-            #${OVERLAY_ID} .vfx-window-header button.p-1\\.5:hover { /* Specific to header controls */
-                opacity: 0.85; /* Using opacity for hover can be simpler than changing background colors if base colors vary. */
-            }
-            #${OVERLAY_ID} .vfx-window-header button.p-1\\.5:hover {
-                transform: scale(1.1);
-            }
-            
-            /* Modal container backdrop behavior */
-            /* !important: Ensures modal backdrop doesn't block page content visibility or interaction if transparent. */
-            #${OVERLAY_ID} #vfx-general-modal-container {
-                background: none !important; /* Allow page content to be visible for "modal" effect, or set to semi-transparent black */
-                backdrop-filter: none !important; /* Avoids double blurs if page has one */
-                pointer-events: none !important; /* Backdrop itself isn't interactive; clicks pass through */
-            }
-            
-            /* Modal content box behavior */
-            /* !important: The modal dialog box itself MUST be interactive. */
-            #${OVERLAY_ID} #vfx-general-modal-container > * {
+            /* Ensure modal content is clickable when shown */
+            .vfx-floating-window #vfx-general-modal-container > * {
                 pointer-events: auto !important;
             }
             
-            /* Audio Toggle Component Styles - these are specific and may need !important to ensure appearance */
-            /* !important: These are for a custom toggle switch; high specificity needed to guarantee appearance over site styles. */
-            #${OVERLAY_ID} #footer-audio-toggle {
+            /* Fix audio toggle visibility and styling */
+            .vfx-floating-window #footer-audio-toggle {
                 display: flex !important;
                 align-items: center !important;
                 visibility: visible !important;
             }
-            #${OVERLAY_ID} #vfx-enable-audio-toggle {
+
+            .vfx-floating-window #vfx-enable-audio-toggle {
                 display: inline-flex !important;
                 visibility: visible !important;
                 opacity: 1 !important;
-                /* background-color defaults are handled by .bg-purple-600 or .bg-gray-600 utility classes */
-                border: 1px solid rgba(255, 255, 255, 0.2);
+                background-color: #4B5563 !important; /* Default gray background */
+                border: 1px solid rgba(255, 255, 255, 0.2) !important;
                 width: 44px !important;
                 height: 24px !important;
                 border-radius: 12px !important;
                 position: relative !important;
                 transition: background-color 0.2s ease !important;
             }
-            /* Specificity for background state of toggle should be enough without !important here if base is not !important */
-            #${OVERLAY_ID} #vfx-enable-audio-toggle.bg-purple-600 { background-color: #9333EA; }
-            #${OVERLAY_ID} #vfx-enable-audio-toggle.bg-gray-600 { background-color: #4B5563; }
             
-            #${OVERLAY_ID} #vfx-enable-audio-toggle span {
-                display: block !important; width: 16px !important; height: 16px !important;
+            .vfx-floating-window #vfx-enable-audio-toggle.bg-purple-600 {
+                background-color: #9333EA !important; /* Purple when enabled */
+            }
+
+            .vfx-floating-window #vfx-enable-audio-toggle.bg-gray-600 {
+                background-color: #4B5563 !important; /* Gray when disabled */
+            }
+
+            .vfx-floating-window #vfx-enable-audio-toggle span {
+                display: block !important;
+                width: 16px !important;
+                height: 16px !important;
                 background-color: #FFFFFF !important;
                 border-radius: 50% !important;
                 transition: transform 0.2s ease !important;
-                position: absolute !important; top: 3px !important; left: 4px !important;
+                position: absolute !important;
+                top: 3px !important;
+                left: 4px !important;
             }
-            #${OVERLAY_ID} #vfx-enable-audio-toggle span.translate-x-6 { transform: translateX(20px) !important; }
-            #${OVERLAY_ID} #vfx-enable-audio-toggle span.translate-x-1 { transform: translateX(0px) !important; }
+
+            .vfx-floating-window #vfx-enable-audio-toggle span.translate-x-6 {
+                transform: translateX(20px) !important;
+            }
+
+            .vfx-floating-window #vfx-enable-audio-toggle span.translate-x-1 {
+                transform: translateX(0px) !important;
+            }
             
-            #${OVERLAY_ID} #footer-audio-toggle label {
-                color: rgba(255, 255, 255, 0.8); /* No !important, should be fine with ID specificity */
-                /* !important: Ensure consistent layout for the toggle label. */
+            .vfx-floating-window #footer-audio-toggle label {
+                color: rgba(255, 255, 255, 0.8) !important;
                 display: inline !important;
                 visibility: visible !important;
             }
             
-            /* Main content area scrolling - essential for usability */
-            /* Specificity should be sufficient here; !important removed as an attempt. */
-            #${OVERLAY_ID} main {
-                overflow-y: auto;
-                max-height: calc(100% - 120px); /* Dynamic height calculation based on header/footer */
-                scrollbar-width: thin;
-                scrollbar-color: rgba(255, 255, 255, 0.2) rgba(0, 0, 0, 0.2);
+            /* Improved scrolling and content layout */
+            .vfx-floating-window main {
+                overflow-y: auto !important;
+                max-height: calc(100% - 120px) !important; /* Account for header and footer */
+                scrollbar-width: thin !important;
+                scrollbar-color: rgba(255, 255, 255, 0.2) rgba(0, 0, 0, 0.2) !important;
             }
-            #${OVERLAY_ID} main::-webkit-scrollbar { width: 8px; }
-            #${OVERLAY_ID} main::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); border-radius: 4px; }
-            #${OVERLAY_ID} main::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+
+            .vfx-floating-window main::-webkit-scrollbar {
+                width: 8px !important;
+            }
+
+            .vfx-floating-window main::-webkit-scrollbar-track {
+                background: rgba(0, 0, 0, 0.2) !important;
+                border-radius: 4px !important;
+            }
+
+            .vfx-floating-window main::-webkit-scrollbar-thumb {
+                background-color: rgba(255, 255, 255, 0.2) !important;
+                border-radius: 4px !important;
+            }
             
-            /* Inspiration card styling */
-            /* !important: Ensures consistent layout and interactive feedback for inspiration cards. */
-            #${OVERLAY_ID} .inspiration-card {
+            /* Improved inspiration cards */
+            .vfx-floating-window .inspiration-card {
                 display: flex !important;
                 flex-direction: column !important;
                 height: auto !important;
@@ -3737,39 +3197,65 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                 padding: 16px !important;
                 transition: all 0.2s ease !important;
             }
-            #${OVERLAY_ID} .inspiration-card:hover {
+
+            .vfx-floating-window .inspiration-card:hover {
                 transform: translateY(-4px) !important;
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
             }
-            #${OVERLAY_ID} .inspiration-card p { /* Line clamping for text */
-                /* !important: Ensures text truncation and line clamping work as expected. */
-                overflow: hidden !important; text-overflow: ellipsis !important; display: -webkit-box !important;
-                 /* -webkit-line-clamp: 4 !important; */ /* .line-clamp-3 was removed, ensure this is desired or restore if needed */
-                -webkit-box-orient: vertical !important; line-height: 1.4 !important;
+
+            .vfx-floating-window .inspiration-card p {
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                display: -webkit-box !important;
+                -webkit-line-clamp: 4 !important; /* Show 4 lines instead of 3 */
+                -webkit-box-orient: vertical !important;
+                line-height: 1.4 !important;
             }
             
-            /* Resize handles styling - UI component for window resizing */
-            /* !important: Ensures resize handles are styled consistently and provide clear visual feedback. */
-            #${OVERLAY_ID} .resize-handle { background-color: transparent !important; transition: background-color 0.2s ease !important; }
-            #${OVERLAY_ID} .resize-handle:hover { background-color: rgba(147, 51, 234, 0.3) !important; /* Purple feedback on hover */ }
-            #${OVERLAY_ID} .resize-handle-ne, #${OVERLAY_ID} .resize-handle-nw, #${OVERLAY_ID} .resize-handle-se, #${OVERLAY_ID} .resize-handle-sw {
-                background-color: rgba(255, 255, 255, 0.1) !important; border: 1px solid rgba(255, 255, 255, 0.2) !important; border-radius: 2px !important;
-            }
-            #${OVERLAY_ID} .resize-handle-ne:hover, #${OVERLAY_ID} .resize-handle-nw:hover, #${OVERLAY_ID} .resize-handle-se:hover, #${OVERLAY_ID} .resize-handle-sw:hover {
-                background-color: rgba(147, 51, 234, 0.5) !important; border-color: rgba(147, 51, 234, 0.8) !important;
-            }
-            #${OVERLAY_ID} .resize-handle-n, #${OVERLAY_ID} .resize-handle-s, #${OVERLAY_ID} .resize-handle-e, #${OVERLAY_ID} .resize-handle-w {
-                background-color: rgba(255, 255, 255, 0.05) !important; border-radius: 2px !important;
-            }
-            
-            /* Window control buttons hover effect */
-            #${OVERLAY_ID} .vfx-window-header button.p-1\\.5:hover {
-                transform: scale(1.1);
+            /* Resize handles styling */
+            .vfx-floating-window .resize-handle {
+                background-color: transparent !important;
+                transition: background-color 0.2s ease !important;
             }
 
-            /* Tools Dropdown Z-index */
-            #${OVERLAY_ID} #vfx-tools-dropdown {
-                z-index: 40; /* Header is z-30, modals are higher (e.g. generalModalContainer z-10000) */
+            .vfx-floating-window .resize-handle:hover {
+                background-color: rgba(147, 51, 234, 0.3) !important; /* Purple highlight on hover */
+            }
+
+            /* Corner resize handles - visible dots */
+            .vfx-floating-window .resize-handle-ne,
+            .vfx-floating-window .resize-handle-nw,
+            .vfx-floating-window .resize-handle-se,
+            .vfx-floating-window .resize-handle-sw {
+                background-color: rgba(255, 255, 255, 0.1) !important;
+                border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                border-radius: 2px !important;
+            }
+            
+            .vfx-floating-window .resize-handle-ne:hover,
+            .vfx-floating-window .resize-handle-nw:hover,
+            .vfx-floating-window .resize-handle-se:hover,
+            .vfx-floating-window .resize-handle-sw:hover {
+                background-color: rgba(147, 51, 234, 0.5) !important;
+                border-color: rgba(147, 51, 234, 0.8) !important;
+            }
+
+            /* Edge resize handles - subtle lines */
+            .vfx-floating-window .resize-handle-n,
+            .vfx-floating-window .resize-handle-s {
+                background-color: rgba(255, 255, 255, 0.05) !important;
+                border-radius: 2px !important;
+            }
+
+            .vfx-floating-window .resize-handle-e,
+            .vfx-floating-window .resize-handle-w {
+                background-color: rgba(255, 255, 255, 0.05) !important;
+                border-radius: 2px !important;
+            }
+
+            /* Window control buttons improvements */
+            .vfx-floating-window .window-control-btn:hover {
+                transform: scale(1.1) !important;
             }
         `);
      }
