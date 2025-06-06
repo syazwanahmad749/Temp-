@@ -1,4 +1,3 @@
-
 // ==UserScript==
 // @name         VideoFX Prompt Artisan Helper (React Parity Edition)
 // @namespace    https://labs.google/
@@ -2233,16 +2232,19 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         overlayContainer.style.position = 'fixed';
         overlayContainer.style.width = windowState.width + 'px';
         overlayContainer.style.height = windowState.height + 'px';
-        overlayContainer.style.right = '20px';
+        overlayContainer.style.left = windowState.x + 'px';
         overlayContainer.style.top = windowState.y + 'px';
-        overlayContainer.style.zIndex = '9999';
+        overlayContainer.style.right = 'auto';
+        // Ensure the overlay sits above all site content
+        overlayContainer.style.zIndex = '2147483647';
         overlayContainer.style.borderRadius = '12px';
         overlayContainer.style.border = '1px solid rgba(255, 255, 255, 0.1)';
         overlayContainer.style.boxShadow = '0 20px 60px rgba(0, 0, 0, 0.5)';
         overlayContainer.style.backgroundColor = '#121212'; // Solid background, no blur
         overlayContainer.style.color = '#ffffff';
         overlayContainer.style.fontFamily = "'Google Sans Text', 'Google Sans', 'Space Grotesk', sans-serif";
-        overlayContainer.style.overflow = 'hidden';
+        // Allow dropdown menus to extend beyond the window without being clipped
+        overlayContainer.style.overflow = 'visible';
         overlayContainer.style.flexDirection = 'column';
         overlayContainer.style.minWidth = windowState.minWidth + 'px';
         overlayContainer.style.minHeight = windowState.minHeight + 'px';
@@ -2788,7 +2790,7 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                 color: hsl(200, 12%, 95.1%);
                 -webkit-font-smoothing: antialiased;
                 -moz-osx-font-smoothing: grayscale;
-                overflow: hidden;
+                overflow: visible;
             }
             #${OVERLAY_ID} .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
             #${OVERLAY_ID} .custom-scrollbar::-webkit-scrollbar-track { background: hsla(0, 0%, 100%, 0.05); border-radius:4px; }
@@ -2982,7 +2984,8 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
                  vertical-align: middle; /* Align icons in button */
             }
              #${OVERLAY_ID} #vfx-tools-dropdown {
-                z-index: 9990; /* Aggressively bring to front within the overlay */
+                /* Highest z-index so menu stays above welcome screen */
+                z-index: 2147483647;
             }
 
 
