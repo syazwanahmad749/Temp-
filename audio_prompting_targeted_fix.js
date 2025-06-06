@@ -2896,27 +2896,6 @@ Output ONLY a valid JSON array, where each object in the array has the following
 
  // --- START: Main Initialization Function ---
     function init() {
-        console.log(`${OVERLAY_TITLE} Helper Script v${SCRIPT_VERSION} initializing...`);
-        
-        // Load saved window state
-        windowState = loadWindowState();
-        loadPromptHistory(); // Load prompt history
-        
-        createOverlayUI();
-        createToggleButton(); // Creates the button to show/hide the overlay
-        attachCoreEventListeners();
-        
-        // Add window resize listener for responsive behavior
-        addTrackedEventListener(window, 'resize', debouncedWindowResize);
-        
-        // Add beforeunload listener to save state
-        addTrackedEventListener(window, 'beforeunload', saveWindowState);
-        
-        renderApp(); // Initial render
-        // Overlay starts hidden, toggle button will show it.
-        if (overlayContainer) overlayContainer.style.display = 'none';
-        if (generalModalContainer) generalModalContainer.style.display = 'none';
-
         // MOVED GM_addStyle CALLS INSIDE THE IIFE, specifically at the end of init()
           // --- CSS Styles (GM_addStyle) ---
         // The main CSS block with vfx-* classes has been added earlier.
@@ -3325,6 +3304,27 @@ Output ONLY a valid JSON array, where each object in the array has the following
             }
             */
         `);
+        console.log(`${OVERLAY_TITLE} Helper Script v${SCRIPT_VERSION} initializing...`);
+
+        // Load saved window state
+        windowState = loadWindowState();
+        loadPromptHistory(); // Load prompt history
+
+        createOverlayUI();
+        createToggleButton(); // Creates the button to show/hide the overlay
+        attachCoreEventListeners();
+
+        // Add window resize listener for responsive behavior
+        addTrackedEventListener(window, 'resize', debouncedWindowResize);
+
+        // Add beforeunload listener to save state
+        addTrackedEventListener(window, 'beforeunload', saveWindowState);
+
+        renderApp(); // Initial render
+        // Overlay starts hidden, toggle button will show it.
+        if (overlayContainer) overlayContainer.style.display = 'none';
+        if (generalModalContainer) generalModalContainer.style.display = 'none';
+
      }
     // --- END: Main Initialization Function ---
 
