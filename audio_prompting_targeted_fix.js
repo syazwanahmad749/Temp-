@@ -1,4 +1,3 @@
-
 // ==UserScript==
 // @name         VideoFX Prompt Artisan Helper (React Parity Edition)
 // @namespace    https://labs.google/
@@ -2233,8 +2232,9 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         overlayContainer.style.position = 'fixed';
         overlayContainer.style.width = windowState.width + 'px';
         overlayContainer.style.height = windowState.height + 'px';
-        overlayContainer.style.right = '20px';
+        overlayContainer.style.left = windowState.x + 'px';
         overlayContainer.style.top = windowState.y + 'px';
+        overlayContainer.style.right = 'auto';
         overlayContainer.style.zIndex = '9999';
         overlayContainer.style.borderRadius = '12px';
         overlayContainer.style.border = '1px solid rgba(255, 255, 255, 0.1)';
