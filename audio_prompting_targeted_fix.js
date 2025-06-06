@@ -21,6 +21,9 @@
     const OVERLAY_TITLE = 'Veo Prompt Artisan';
     const OVERLAY_ID = 'vfx-artisan-overlay';
     const TOGGLE_BUTTON_ID = 'vfx-artisan-toggle-btn';
+    // Animation classes for overlay transitions
+    const ANIM_BOUNCE_IN = 'animate-bounceIn';
+    const ANIM_FADE_OUT = 'animate-fadeOut';
 
     // Enhanced UI state with better defaults and cleanup tracking
     const DEFAULT_WINDOW_STATE = {
@@ -2172,19 +2175,25 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         document.body.appendChild(toggleButton);
         
         toggleButton.addEventListener('click', () => {
-            if (overlayContainer) {
-                const isHidden = overlayContainer.style.display === 'none';
-                overlayContainer.style.display = isHidden ? 'flex' : 'none';
-                
-                // Update button appearance
-                if (isHidden) {
-                    toggleButton.style.background = 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
-                    toggleButton.style.transform = 'scale(1.1)';
-                } else {
-                    toggleButton.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-                    toggleButton.style.transform = 'scale(1)';
-                }
+            if (!overlayContainer) return;
+            const isHidden = overlayContainer.style.display === 'none';
+            if (isHidden) {
+                overlayContainer.classList.remove(ANIM_FADE_OUT);
+                overlayContainer.style.display = 'flex';
+                void overlayContainer.offsetWidth; // restart animation
+                overlayContainer.classList.add(ANIM_BOUNCE_IN);
+                toggleButton.style.background = 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
+                toggleButton.style.transform = 'scale(1.1)';
+                windowState.isVisible = true;
+            } else {
+                overlayContainer.classList.remove(ANIM_BOUNCE_IN);
+                overlayContainer.classList.add(ANIM_FADE_OUT);
+                windowState.isVisible = false;
+                setTimeout(() => { overlayContainer.style.display = 'none'; }, 300);
+                toggleButton.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                toggleButton.style.transform = 'scale(1)';
             }
+            saveWindowState();
         });
         
         // Add hover effects
@@ -2376,9 +2385,11 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
     function attachCoreEventListeners() {
         // Close overlay button
         overlayContainer.querySelector('#vfx-artisan-close-overlay')?.addEventListener('click', () => {
-            overlayContainer.style.display = 'none';
+            overlayContainer.classList.remove(ANIM_BOUNCE_IN);
+            overlayContainer.classList.add(ANIM_FADE_OUT);
             windowState.isVisible = false;
             saveWindowState();
+            setTimeout(() => { overlayContainer.style.display = 'none'; }, 300);
         });
 
         // Enhanced window controls with state management
@@ -2693,6 +2704,14 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             #${OVERLAY_ID} .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
             #${OVERLAY_ID} @keyframes popIn { 0% { opacity: 0; transform: scale(0.95) translateY(10px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
             #${OVERLAY_ID} .animate-popIn { animation: popIn 0.3s ease-out forwards; }
+            #${OVERLAY_ID} @keyframes bounceIn {
+                0% { transform: scale(0.6); opacity: 0; }
+                60% { transform: scale(1.1); opacity: 1; }
+                100% { transform: scale(1); }
+            }
+            #${OVERLAY_ID} .animate-bounceIn { animation: bounceIn 0.4s ease-out forwards; }
+            #${OVERLAY_ID} @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+            #${OVERLAY_ID} .animate-fadeOut { animation: fadeOut 0.3s ease-out forwards; }
 
             #${OVERLAY_ID} .vpa-text-main { color: hsl(200, 12%, 95.1%); }
             #${OVERLAY_ID} .vpa-text-subdued { color: hsla(0, 0%, 100%, 0.75); }
