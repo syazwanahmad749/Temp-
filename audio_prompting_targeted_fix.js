@@ -2078,11 +2078,6 @@ Output ONLY a valid JSON array, where each object in the array has the following
         showLoading(state.activeMode === 'sceneExtender' ? "Extending scene..." : "Crafting prompts...");
         state.generatedPrompts = []; // Clear previous prompts
         clearError();
-            return;
-        }
-        showLoading(state.activeMode === 'sceneExtender' ? "Extending scene..." : "Crafting prompts...");
-        state.generatedPrompts = []; // Clear previous prompts
-        clearError();
 
         let paramsForGeneration = { ...state.promptParams };
         if (state.uploadedImage) { // Already set in state.promptParams, but good to be explicit
