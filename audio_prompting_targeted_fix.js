@@ -1870,7 +1870,8 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
 
         try {
             console.log('[VideoFX Artisan] Making API call with params:', paramsForGeneration);
-            const apiResult = await callArtisanApiInternal(state.activeMode === 'generator' ? 'mainPromptGen' : 'sceneExtender', paramsForGeneration.description, paramsForGeneration);
+            const apiActionKey = state.activeMode === 'generator' ? 'mainPromptGen' : 'sceneExtender';
+            const apiResult = await callArtisanApiInternal(apiActionKey, paramsForGeneration.description, paramsForGeneration);
 
             if (state.activeMode === 'sceneExtender') {
                 if (typeof apiResult === 'string') { // Expecting plain text for scene extender
