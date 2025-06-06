@@ -2236,7 +2236,7 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         overlayContainer.style.top = windowState.y + 'px';
         overlayContainer.style.right = 'auto';
         // Ensure the overlay sits above all site content
-        overlayContainer.style.zIndex = '2147483647';
+        overlayContainer.style.setProperty('z-index', '2147483647', 'important');
         overlayContainer.style.borderRadius = '12px';
         overlayContainer.style.border = '1px solid rgba(255, 255, 255, 0.1)';
         overlayContainer.style.boxShadow = '0 20px 60px rgba(0, 0, 0, 0.5)';
@@ -2983,9 +2983,9 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             #${OVERLAY_ID} #vfx-tools-menu-btn svg {
                  vertical-align: middle; /* Align icons in button */
             }
-             #${OVERLAY_ID} #vfx-tools-dropdown {
+            #${OVERLAY_ID} #vfx-tools-dropdown {
                 /* Highest z-index so menu stays above welcome screen */
-                z-index: 2147483647;
+                z-index: 2147483647 !important;
             }
 
 
