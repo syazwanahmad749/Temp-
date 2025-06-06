@@ -2896,435 +2896,450 @@ Output ONLY a valid JSON array, where each object in the array has the following
 
  // --- START: Main Initialization Function ---
     function init() {
-        // MOVED GM_addStyle CALLS INSIDE THE IIFE, specifically at the end of init()
-          // --- CSS Styles (GM_addStyle) ---
-        // The main CSS block with vfx-* classes has been added earlier.
-        // This section is for Tailwind-like utilities and specific overrides if needed.
-        // Most of the old Tailwind classes should be removed or replaced by vfx-* classes.
-        GM_addStyle(`
-            /* Tailwind-like utility classes (subset) - RETAINED FOR NOW, but should be phased out */
-            /* Most of these should be covered by specific vfx-* component styles or default browser behaviors. */
-            /* #${OVERLAY_ID} .fixed { position: fixed; } */ /* Covered by #${OVERLAY_ID} styling */
-            /* #${OVERLAY_ID} .inset-0 { top: 0; right: 0; bottom: 0; left: 0; } */ /* Likely for full-screen modal backdrops, handled by .vfx-modal-backdrop */
-            /* #${OVERLAY_ID} .flex { display: flex; } */ /* Handled by components */
-            /* #${OVERLAY_ID} .flex-col { flex-direction: column; } */ /* Handled by components */
-            /* #${OVERLAY_ID} .items-center { align-items: center; } */ /* Handled by components */
-            /* #${OVERLAY_ID} .justify-center { justify-content: center; } */ /* Handled by components */
-            /* #${OVERLAY_ID} .overflow-hidden { overflow: hidden; } */ /* Handled by components like #${OVERLAY_ID} or .vfx-card */
-            /* #${OVERLAY_ID} .sticky { position: sticky; } */ /* Used by .vfx-header, .vfx-footer */
-            /* #${OVERLAY_ID} .top-0 { top: 0; } */ /* Used by .vfx-header */
-            /* #${OVERLAY_ID} .bottom-0 { bottom: 0; } */ /* Used by .vfx-footer */
-            /* #${OVERLAY_ID} .w-full { width: 100%; } */ /* Removed to encourage component-specific width or explicit utility like vfx-utility-w-full */
-            /* ... other minimal utilities if absolutely necessary ... */
-
-            /* Specific Overrides or Adjustments - Post vfx-* system */
-            #${OVERLAY_ID} .material-symbols-rounded.material-symbols-filled,
-            #${OVERLAY_ID} .material-symbols-outlined.material-symbols-filled,
-            #${OVERLAY_ID} .material-icons.material-symbols-filled {
-                font-variation-settings: 'FILL' 1; /* Ensure filled icons are actually filled */
-            }
-
-           /* Info Tooltip Trigger specific styling */
-            #${OVERLAY_ID} .vfx-tooltip-trigger {
-                display: inline-flex; /* Aligns icon properly with text */
-                cursor: help;
-            }
-            /* .vfx-icon-info is already styled by vfx-icon-* and color var(--vfx-text-faint) */
-
-
-            /* Styling for main toggle button */
-            #${TOGGLE_BUTTON_ID} {
-              /* Base styles are vfx-button, vfx-button-primary, vfx-button-float */
-              position: fixed;
-              bottom: var(--vfx-spacing-large);
-              right: var(--vfx-spacing-large);
-              z-index: 100000; /* Highest z-index */
-            }
-            #${TOGGLE_BUTTON_ID}.vfx-button-active {
-                background-color: var(--vfx-secondary-accent-color); /* Example for active state */
-            }
-            /* Icon color within TOGGLE_BUTTON_ID handled by .vfx-button styles */
-
-
-            /* Additional styles for specific VFX classes added during JS refactoring */
-
-            /* Notifications */
-            .vfx-notification {
-                position: fixed;
-                top: var(--vfx-spacing-large);
-                right: var(--vfx-spacing-large);
-                padding: var(--vfx-spacing-medium) var(--vfx-spacing-large);
-                border-radius: var(--vfx-border-radius-medium);
-                box-shadow: var(--vfx-shadow-large);
-                z-index: 100001; /* Above toggle button */
-                font-family: var(--vfx-font-family-sans);
-                font-size: var(--vfx-font-size-small);
-                font-weight: var(--vfx-font-weight-medium);
-                max-width: 320px;
-                color: var(--vfx-text-on-accent); /* Default, can be overridden by type */
-            }
-            .vfx-notification-info {
-                background-color: var(--vfx-info-color);
-                color: var(--vfx-text-on-info, var(--vfx-text-on-accent));
-            }
-            .vfx-notification-success {
-                background-color: var(--vfx-success-color);
-                color: var(--vfx-text-on-success, var(--vfx-text-on-accent));
-            }
-            .vfx-notification-warning {
-                background-color: var(--vfx-warning-color);
-                color: var(--vfx-text-on-warning, var(--vfx-text-dark)); /* Dark text on yellow often better */
-            }
-            .vfx-notification-error {
-                background-color: var(--vfx-error-color);
-                color: var(--vfx-text-on-error, var(--vfx-text-on-accent));
-            }
-
-            /* Form Groups & Layout */
-            .vfx-form-group { margin-bottom: var(--vfx-spacing-medium); }
-            .vfx-form-group-fullwidth { width: 100%; } /* Utility for full width form groups */
-            .vfx-label-container { display: flex; align-items: center; margin-bottom: var(--vfx-spacing-xsmall); }
-            .vfx-form-grid { display: grid; gap: var(--vfx-spacing-medium); }
-            .vfx-grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
-            .vfx-grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            .vfx-grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-            .vfx-grid-col-span-1 { grid-column: span 1 / span 1; }
-            .vfx-grid-col-span-2 { grid-column: span 2 / span 2; }
-            .vfx-grid-col-span-3 { grid-column: span 3 / span 3; }
-            .vfx-form-container { display: flex; flex-direction: column; gap: var(--vfx-spacing-large); }
-
-
-            /* Alerts */
-            .vfx-alert {
-                padding: var(--vfx-spacing-medium);
-                border-radius: var(--vfx-border-radius-medium);
-                border: 1px solid transparent;
-                margin-bottom: var(--vfx-spacing-medium);
-            }
-            .vfx-alert-title { font-weight: var(--vfx-font-weight-bold); margin-bottom: var(--vfx-spacing-xsmall); }
-            .vfx-alert-message { font-size: var(--vfx-font-size-small); }
-            .vfx-alert-info {
-                background-color: var(--vfx-info-bg-soft);
-                border-color: var(--vfx-info-border-soft);
-                color: var(--vfx-info-text-soft);
-            }
-            .vfx-alert-info .vfx-alert-title { color: var(--vfx-info-text-strong); }
-            .vfx-alert-error {
-                background-color: var(--vfx-error-bg-soft);
-                border-color: var(--vfx-error-border-soft);
-                color: var(--vfx-error-text-soft);
-            }
-            .vfx-alert-error .vfx-alert-title { color: var(--vfx-error-text-strong); }
-
-
-            /* Lists */
-            .vfx-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--vfx-spacing-small); }
-            .vfx-list-item { padding: var(--vfx-spacing-small); border-radius: var(--vfx-border-radius-small); }
-            .vfx-list-item.vfx-card-nested { /* Uses .vfx-card styles, padding might need adjustment if it's too much */ }
-            .vfx-list-item-interactive { cursor: pointer; transition: background-color var(--vfx-transition-duration); }
-            .vfx-list-item-interactive:hover { background-color: var(--vfx-background-hover); }
-            .vfx-list-disc { list-style-type: disc; padding-left: var(--vfx-spacing-large); } /* For traditional bullet points */
-            .vfx-list-small li { font-size: var(--vfx-font-size-xsmall); }
-            .vfx-list-item-text { margin-bottom: var(--vfx-spacing-xsmall); flex-grow: 1; /* Allow text to take space */ }
-            .vfx-list-item-actions { display: flex; justify-content: flex-end; gap: var(--vfx-spacing-small); margin-top: var(--vfx-spacing-small); flex-shrink: 0; /* Prevent shrinking */ }
-
-
-            /* Prompt Item Specifics */
-            .vfx-prompt-items-layout { display: flex; flex-direction: column; gap: var(--vfx-spacing-medium); }
-            .vfx-prompt-item { /* Uses .vfx-card */ display: flex; flex-direction: column; }
-            .vfx-prompt-item-edit-area { margin-bottom: var(--vfx-spacing-small); }
-            .vfx-prompt-edit-textarea { /* Uses .vfx-textarea */ min-height: 80px; }
-            .vfx-prompt-item-text { white-space: pre-wrap; word-break: break-word; margin-bottom: var(--vfx-spacing-medium); flex-grow: 1; text-align: left; }
-            .vfx-prompt-item-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--vfx-spacing-xsmall); align-items: center; margin-top: auto; /* Push actions to bottom */ }
-
-            /* Modal Specifics */
-            .vfx-modal-small { max-width: 400px; width: 90vw; }
-            .vfx-modal-medium { max-width: 600px; width: 90vw; }
-            .vfx-modal-large { max-width: 900px; width: 90vw; }
-            .vfx-loading-spinner-container { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--vfx-spacing-xlarge); min-height: 200px; }
-            .vfx-loading-message { margin-top: var(--vfx-spacing-medium); font-size: var(--vfx-font-size-small); }
-            .vfx-results-container { display: flex; flex-direction: column; gap: var(--vfx-spacing-medium); }
-            .vfx-modal-subheader {
-                font-size: var(--vfx-font-size-large); /* Increased size */
-                font-weight: var(--vfx-font-weight-semibold);
-                color: var(--vfx-text-accent);
-                margin-bottom: var(--vfx-spacing-medium); /* Increased margin */
-                padding-bottom: var(--vfx-spacing-small); /* Increased padding */
-                border-bottom: 1px solid var(--vfx-border-color-strong); /* Stronger border */
-            }
-            .vfx-results-paragraph { white-space: pre-wrap; font-size: var(--vfx-font-size-small); }
-            .vfx-results-list-container { max-height: 60vh; overflow-y: auto; padding-right: var(--vfx-spacing-small); } /* Uses vfx-scrollbar */
-            .vfx-result-category { margin-bottom: var(--vfx-spacing-medium); }
-            .vfx-category-title { font-weight: var(--vfx-font-weight-semibold); margin-bottom: var(--vfx-spacing-xsmall); font-size: var(--vfx-font-size-medium); color: var(--vfx-text-subdued); }
-            .vfx-modal-footer {
-                display: flex;
-                justify-content: flex-end;
-                gap: var(--vfx-spacing-medium);
-                padding-top: var(--vfx-spacing-large);
-                margin-top: var(--vfx-spacing-large);
-                border-top: 1px solid var(--vfx-border-color-strong);
-            }
-            .vfx-audio-description { margin-top: var(--vfx-spacing-xsmall); font-style: italic; }
-            .vfx-key-elements { margin-top: var(--vfx-spacing-xsmall); }
-            .vfx-image-preview-large img { max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: var(--vfx-border-radius-medium); margin: 0 auto; display: block; }
-
-
-            /* Button Icon Placement */
-            .vfx-button-icon-left > .vfx-icon { margin-right: var(--vfx-spacing-small); }
-            .vfx-button-icon-right > .vfx-icon { margin-left: var(--vfx-spacing-small); }
-
-
-            /* Animations (ensure these are defined) */
-            @keyframes vfxFadeIn { from { opacity: 0; } to { opacity: 1; } }
-            .vfx-animate-fade-in { animation: vfxFadeIn var(--vfx-transition-duration-slow) ease-out forwards; }
-
-            @keyframes vfxPopIn {
-                0% { opacity: 0; transform: scale(0.95) translateY(10px); }
-                100% { opacity: 1; transform: scale(1) translateY(0); }
-            }
-            .vfx-animate-pop-in { animation: vfxPopIn var(--vfx-transition-duration) ease-out forwards; }
-
-            @keyframes vfxSlideInRight {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-            .vfx-animate-slide-in-right { animation: vfxSlideInRight var(--vfx-transition-duration) ease-out forwards; }
-
-            @keyframes vfxSlideOutRight {
-                from { transform: translateX(0); opacity: 1; }
-                to { transform: translateX(100%); opacity: 0; }
-            }
-            .vfx-animate-slide-out-right { animation: vfxSlideOutRight var(--vfx-transition-duration) ease-out forwards; }
-
-            @keyframes vfxSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-            .vfx-animate-spin { animation: vfxSpin 1s linear infinite; }
-
-            /* Remove remaining Tailwind-like utility classes if they are fully replaced by vfx-* system */
-            /* e.g. .mr-2\\.5 is replaced by .vfx-button-icon-left > .vfx-icon margin or specific component styles */
-            /* Any remaining utilities should be reviewed and have a vfx-utility-* prefix or be removed. */
-
-            /* Styles for classes added in the last JS updates */
-            .vfx-image-preview-item {
-                display: flex;
-                align-items: center;
-                padding: var(--vfx-spacing-small);
-                background-color: var(--vfx-background-elevated); /* Or vfx-background-card-nested */
-                border-radius: var(--vfx-border-radius-medium);
-                border: 1px solid var(--vfx-border-color-soft);
-                margin-bottom: var(--vfx-spacing-medium); /* Space it from the input area below */
-            }
-            .vfx-image-preview-thumbnail {
-                width: 48px; /* Approx w-12 h-12 */
-                height: 48px;
-                object-fit: cover;
-                border-radius: var(--vfx-border-radius-small);
-                margin-right: var(--vfx-spacing-medium);
-            }
-            .vfx-image-preview-info {
-                flex-grow: 1;
-                font-size: var(--vfx-font-size-small); /* For the "MB Max" text */
-            }
-            .vfx-text-truncate {
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-            .vfx-image-preview-clear-btn {
-                margin-left: var(--vfx-spacing-small);
-            }
-
-            .vfx-welcome-icon { /* Specific styling for the large icon on welcome screen */
-                margin-bottom: var(--vfx-spacing-large);
-                /* font-size: var(--vfx-icon-xlarge) handled by class, color by vfx-icon-accent */
-            }
-            .vfx-icon-cta-arrow { /* For inspiration card "Use Theme ->" */
-                transition: transform var(--vfx-transition-duration);
-                display: inline-block; /* Allows transform */
-            }
-            .vfx-inspiration-card:hover .vfx-icon-cta-arrow {
-                transform: translateX(3px);
-            }
-
-            .vfx-prompt-items-layout { /* Already defined as display:flex, flex-direction:column; gap: var(--vfx-spacing-medium); */
-                /* No additional styles needed if this is sufficient */
-            }
-            .vfx-footer-select-group { /* Wrapper for select elements in footer, part of a grid */
-                /* Grid properties are on vfx-footer-grid. This class is for potential specific styling if needed */
-            }
-            .vfx-footer-placeholder { /* Used for grid alignment, likely needs no visual style */
-                display: none; /* Typically hidden unless in certain layouts */
-            }
-            @media (min-width: 1024px) { /* lg breakpoint from original Tailwind */
-                .lg\\:block { display: block; } /* For footer-sceneext-placeholder */
-                 #footer-sceneext-placeholder.lg\\:col-span-2 { grid-column: span 2 / span 2; }
-            }
-
-
-        `);
-        // Font imports (should be fine as they are global)
-        GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Google+Sans+Text:wght@400;500;700&family=Google+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap');");
-        GM_addStyle("@import url('https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Outlined|Material+Icons+Round|Material+Icons+Sharp|Material+Icons+Two+Tone');");
-        GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');");
-        GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');");
-        
-        // Additional fixes for text color and alignment - MOSTLY REMOVED/COMMENTED
-        GM_addStyle(`
-            /*
-                The following rules were previously !important overrides.
-                They are now commented out or removed as the vfx-* system should handle them.
-                If specific issues arise due to host page styles, targeted, non-!important
-                overrides might be necessary, but the goal is to rely on the vfx-* system's specificity.
-            */
-
-            /* Input and Textarea text color is handled by .vfx-input, .vfx-textarea color properties */
-            /*
-            .vfx-floating-window input,
-            .vfx-floating-window textarea,
-            .vfx-floating-window select {
-                color: #ffffff !important;
-                background-color: rgba(255, 255, 255, 0.1) !important;
-                border: 1px solid rgba(255, 255, 255, 0.2) !important;
-            }
-            */
-            
-            /* Placeholder color is handled by .vfx-input::placeholder, .vfx-textarea::placeholder */
-            /*
-            .vfx-floating-window input::placeholder,
-            .vfx-floating-window textarea::placeholder {
-                color: rgba(255, 255, 255, 0.6) !important;
-            }
-            */
-            
-            /* Blur and filter effects are not part of the new design. Pointer events are handled by base styles. */
-            /*
-            .vfx-floating-window {
-                backdrop-filter: none !important;
-                filter: none !important;
-                pointer-events: auto !important;
-            }
-            */
-            
-            /* Pointer events for interactive elements should be default 'auto' or handled by vfx-button[disabled] */
-            /*
-            .vfx-floating-window button,
-            .vfx-floating-window input,
-            .vfx-floating-window textarea,
-            .vfx-floating-window select,
-            .vfx-floating-window a {
-                pointer-events: auto !important;
-                cursor: pointer !important;
-            }
-            */
-            
-            /* Icon sizes are handled by vfx-icon-small, vfx-icon-medium, vfx-icon-large */
-            /*
-            .vfx-floating-window .w-12 { width: 3rem !important; height: 3rem !important; }
-            .vfx-floating-window .h-12 { height: 3rem !important; }
-            */
-            
-            /* Flexbox utilities are largely replaced by component-specific flex rules or general layout classes like vfx-form-grid */
-            /*
-            .vfx-floating-window .flex { display: flex !important; }
-            .vfx-floating-window .items-center { align-items: center !important; }
-            .vfx-floating-window .justify-center { justify-content: center !important; }
-            */
-            
-            /* Button text color is handled by .vfx-button and its variants */
-            /*
-            .vfx-floating-window button {
-                color: inherit !important;
-            }
-            */
-            
-            /* Select option styling is handled by .vfx-select option */
-            /*
-            .vfx-floating-window select option {
-                background-color: #1f2937 !important;
-                color: #ffffff !important;
-            }
-            */
-            
-            /* Global pointer-events and filter none is too broad and can have unintended side effects. */
-            /*
-            .vfx-floating-window * {
-                filter: none !important;
-                backdrop-filter: none !important;
-                pointer-events: auto !important;
-            }
-            */
-            
-            /* .vfx-window-content is not a defined class, pointer events handled by specific child elements */
-            /*
-            .vfx-floating-window .vfx-window-content {
-                pointer-events: auto !important;
-            }
-            */
-            
-            /* Button hover opacity is handled by .vfx-button:hover definitions */
-            /*
-            .vfx-floating-window button:hover {
-                opacity: 0.8 !important;
-            }
-            */
-            
-            /* Modal backdrop pointer events are handled by .vfx-modal-backdrop */
-            /*
-            .vfx-floating-window #vfx-general-modal-container {
-                background: none !important;
-                backdrop-filter: none !important;
-                pointer-events: none !important;
-            }
-            .vfx-floating-window #vfx-general-modal-container > * {
-                pointer-events: auto !important;
-            }
-            */
-            
-            /* Audio toggle display and alignment are handled by .vfx-audio-toggle-container and its flex properties */
-            /*
-            .vfx-floating-window #footer-audio-toggle {
-                display: flex !important;
-                align-items: center !important;
-                visibility: visible !important;
-            }
-            */
-            
-            /* .vfx-toggle-switch (formerly #vfx-enable-audio-toggle) is styled by its own vfx-* classes */
-            /*
-            .vfx-floating-window #vfx-enable-audio-toggle {
-                display: inline-flex !important;
-                visibility: visible !important;
-                opacity: 1 !important;
-                background-color: #4B5563 !important;
-                border: 1px solid rgba(255, 255, 255, 0.2) !important;
-                width: 44px !important;
-                height: 24px !important;
-                border-radius: 12px !important;
-                position: relative !important;
-                transition: background-color 0.2s ease !important;
-            }
-            */
-        `);
         console.log(`${OVERLAY_TITLE} Helper Script v${SCRIPT_VERSION} initializing...`);
+        try {
+            // --- CSS Styles (GM_addStyle) ---
+            // The main CSS block with vfx-* classes has been added earlier.
+            // This section is for Tailwind-like utilities and specific overrides if needed.
+            // Most of the old Tailwind classes should be removed or replaced by vfx-* classes.
+            GM_addStyle(`
+                /* Tailwind-like utility classes (subset) - RETAINED FOR NOW, but should be phased out */
+                /* Most of these should be covered by specific vfx-* component styles or default browser behaviors. */
+                /* #${OVERLAY_ID} .fixed { position: fixed; } */ /* Covered by #${OVERLAY_ID} styling */
+                /* #${OVERLAY_ID} .inset-0 { top: 0; right: 0; bottom: 0; left: 0; } */ /* Likely for full-screen modal backdrops, handled by .vfx-modal-backdrop */
+                /* #${OVERLAY_ID} .flex { display: flex; } */ /* Handled by components */
+                /* #${OVERLAY_ID} .flex-col { flex-direction: column; } */ /* Handled by components */
+                /* #${OVERLAY_ID} .items-center { align-items: center; } */ /* Handled by components */
+                /* #${OVERLAY_ID} .justify-center { justify-content: center; } */ /* Handled by components */
+                /* #${OVERLAY_ID} .overflow-hidden { overflow: hidden; } */ /* Handled by components like #${OVERLAY_ID} or .vfx-card */
+                /* #${OVERLAY_ID} .sticky { position: sticky; } */ /* Used by .vfx-header, .vfx-footer */
+                /* #${OVERLAY_ID} .top-0 { top: 0; } */ /* Used by .vfx-header */
+                /* #${OVERLAY_ID} .bottom-0 { bottom: 0; } */ /* Used by .vfx-footer */
+                /* #${OVERLAY_ID} .w-full { width: 100%; } */ /* Removed to encourage component-specific width or explicit utility like vfx-utility-w-full */
+                /* ... other minimal utilities if absolutely necessary ... */
 
-        // Load saved window state
-        windowState = loadWindowState();
-        loadPromptHistory(); // Load prompt history
+                /* Specific Overrides or Adjustments - Post vfx-* system */
+                #${OVERLAY_ID} .material-symbols-rounded.material-symbols-filled,
+                #${OVERLAY_ID} .material-symbols-outlined.material-symbols-filled,
+                #${OVERLAY_ID} .material-icons.material-symbols-filled {
+                    font-variation-settings: 'FILL' 1; /* Ensure filled icons are actually filled */
+                }
 
-        createOverlayUI();
-        createToggleButton(); // Creates the button to show/hide the overlay
-        attachCoreEventListeners();
+               /* Info Tooltip Trigger specific styling */
+                #${OVERLAY_ID} .vfx-tooltip-trigger {
+                    display: inline-flex; /* Aligns icon properly with text */
+                    cursor: help;
+                }
+                /* .vfx-icon-info is already styled by vfx-icon-* and color var(--vfx-text-faint) */
 
-        // Add window resize listener for responsive behavior
-        addTrackedEventListener(window, 'resize', debouncedWindowResize);
 
-        // Add beforeunload listener to save state
-        addTrackedEventListener(window, 'beforeunload', saveWindowState);
+                /* Styling for main toggle button */
+                #${TOGGLE_BUTTON_ID} {
+                  /* Base styles are vfx-button, vfx-button-primary, vfx-button-float */
+                  position: fixed;
+                  bottom: var(--vfx-spacing-large);
+                  right: var(--vfx-spacing-large);
+                  z-index: 100000; /* Highest z-index */
+                }
+                #${TOGGLE_BUTTON_ID}.vfx-button-active {
+                    background-color: var(--vfx-secondary-accent-color); /* Example for active state */
+                }
+                /* Icon color within TOGGLE_BUTTON_ID handled by .vfx-button styles */
 
-        renderApp(); // Initial render
-        // Overlay starts hidden, toggle button will show it.
-        if (overlayContainer) overlayContainer.style.display = 'none';
-        if (generalModalContainer) generalModalContainer.style.display = 'none';
 
+                /* Additional styles for specific VFX classes added during JS refactoring */
+
+                /* Notifications */
+                .vfx-notification {
+                    position: fixed;
+                    top: var(--vfx-spacing-large);
+                    right: var(--vfx-spacing-large);
+                    padding: var(--vfx-spacing-medium) var(--vfx-spacing-large);
+                    border-radius: var(--vfx-border-radius-medium);
+                    box-shadow: var(--vfx-shadow-large);
+                    z-index: 100001; /* Above toggle button */
+                    font-family: var(--vfx-font-family-sans);
+                    font-size: var(--vfx-font-size-small);
+                    font-weight: var(--vfx-font-weight-medium);
+                    max-width: 320px;
+                    color: var(--vfx-text-on-accent); /* Default, can be overridden by type */
+                }
+                .vfx-notification-info {
+                    background-color: var(--vfx-info-color);
+                    color: var(--vfx-text-on-info, var(--vfx-text-on-accent));
+                }
+                .vfx-notification-success {
+                    background-color: var(--vfx-success-color);
+                    color: var(--vfx-text-on-success, var(--vfx-text-on-accent));
+                }
+                .vfx-notification-warning {
+                    background-color: var(--vfx-warning-color);
+                    color: var(--vfx-text-on-warning, var(--vfx-text-dark)); /* Dark text on yellow often better */
+                }
+                .vfx-notification-error {
+                    background-color: var(--vfx-error-color);
+                    color: var(--vfx-text-on-error, var(--vfx-text-on-accent));
+                }
+
+                /* Form Groups & Layout */
+                .vfx-form-group { margin-bottom: var(--vfx-spacing-medium); }
+                .vfx-form-group-fullwidth { width: 100%; } /* Utility for full width form groups */
+                .vfx-label-container { display: flex; align-items: center; margin-bottom: var(--vfx-spacing-xsmall); }
+                .vfx-form-grid { display: grid; gap: var(--vfx-spacing-medium); }
+                .vfx-grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+                .vfx-grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+                .vfx-grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+                .vfx-grid-col-span-1 { grid-column: span 1 / span 1; }
+                .vfx-grid-col-span-2 { grid-column: span 2 / span 2; }
+                .vfx-grid-col-span-3 { grid-column: span 3 / span 3; }
+                .vfx-form-container { display: flex; flex-direction: column; gap: var(--vfx-spacing-large); }
+
+
+                /* Alerts */
+                .vfx-alert {
+                    padding: var(--vfx-spacing-medium);
+                    border-radius: var(--vfx-border-radius-medium);
+                    border: 1px solid transparent;
+                    margin-bottom: var(--vfx-spacing-medium);
+                }
+                .vfx-alert-title { font-weight: var(--vfx-font-weight-bold); margin-bottom: var(--vfx-spacing-xsmall); }
+                .vfx-alert-message { font-size: var(--vfx-font-size-small); }
+                .vfx-alert-info {
+                    background-color: var(--vfx-info-bg-soft);
+                    border-color: var(--vfx-info-border-soft);
+                    color: var(--vfx-info-text-soft);
+                }
+                .vfx-alert-info .vfx-alert-title { color: var(--vfx-info-text-strong); }
+                .vfx-alert-error {
+                    background-color: var(--vfx-error-bg-soft);
+                    border-color: var(--vfx-error-border-soft);
+                    color: var(--vfx-error-text-soft);
+                }
+                .vfx-alert-error .vfx-alert-title { color: var(--vfx-error-text-strong); }
+
+
+                /* Lists */
+                .vfx-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--vfx-spacing-small); }
+                .vfx-list-item { padding: var(--vfx-spacing-small); border-radius: var(--vfx-border-radius-small); }
+                .vfx-list-item.vfx-card-nested { /* Uses .vfx-card styles, padding might need adjustment if it's too much */ }
+                .vfx-list-item-interactive { cursor: pointer; transition: background-color var(--vfx-transition-duration); }
+                .vfx-list-item-interactive:hover { background-color: var(--vfx-background-hover); }
+                .vfx-list-disc { list-style-type: disc; padding-left: var(--vfx-spacing-large); } /* For traditional bullet points */
+                .vfx-list-small li { font-size: var(--vfx-font-size-xsmall); }
+                .vfx-list-item-text { margin-bottom: var(--vfx-spacing-xsmall); flex-grow: 1; /* Allow text to take space */ }
+                .vfx-list-item-actions { display: flex; justify-content: flex-end; gap: var(--vfx-spacing-small); margin-top: var(--vfx-spacing-small); flex-shrink: 0; /* Prevent shrinking */ }
+
+
+                /* Prompt Item Specifics */
+                .vfx-prompt-items-layout { display: flex; flex-direction: column; gap: var(--vfx-spacing-medium); }
+                .vfx-prompt-item { /* Uses .vfx-card */ display: flex; flex-direction: column; }
+                .vfx-prompt-item-edit-area { margin-bottom: var(--vfx-spacing-small); }
+                .vfx-prompt-edit-textarea { /* Uses .vfx-textarea */ min-height: 80px; }
+                .vfx-prompt-item-text { white-space: pre-wrap; word-break: break-word; margin-bottom: var(--vfx-spacing-medium); flex-grow: 1; text-align: left; }
+                .vfx-prompt-item-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--vfx-spacing-xsmall); align-items: center; margin-top: auto; /* Push actions to bottom */ }
+
+                /* Modal Specifics */
+                .vfx-modal-small { max-width: 400px; width: 90vw; }
+                .vfx-modal-medium { max-width: 600px; width: 90vw; }
+                .vfx-modal-large { max-width: 900px; width: 90vw; }
+                .vfx-loading-spinner-container { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--vfx-spacing-xlarge); min-height: 200px; }
+                .vfx-loading-message { margin-top: var(--vfx-spacing-medium); font-size: var(--vfx-font-size-small); }
+                .vfx-results-container { display: flex; flex-direction: column; gap: var(--vfx-spacing-medium); }
+                .vfx-modal-subheader {
+                    font-size: var(--vfx-font-size-large); /* Increased size */
+                    font-weight: var(--vfx-font-weight-semibold);
+                    color: var(--vfx-text-accent);
+                    margin-bottom: var(--vfx-spacing-medium); /* Increased margin */
+                    padding-bottom: var(--vfx-spacing-small); /* Increased padding */
+                    border-bottom: 1px solid var(--vfx-border-color-strong); /* Stronger border */
+                }
+                .vfx-results-paragraph { white-space: pre-wrap; font-size: var(--vfx-font-size-small); }
+                .vfx-results-list-container { max-height: 60vh; overflow-y: auto; padding-right: var(--vfx-spacing-small); } /* Uses vfx-scrollbar */
+                .vfx-result-category { margin-bottom: var(--vfx-spacing-medium); }
+                .vfx-category-title { font-weight: var(--vfx-font-weight-semibold); margin-bottom: var(--vfx-spacing-xsmall); font-size: var(--vfx-font-size-medium); color: var(--vfx-text-subdued); }
+                .vfx-modal-footer {
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: var(--vfx-spacing-medium);
+                    padding-top: var(--vfx-spacing-large);
+                    margin-top: var(--vfx-spacing-large);
+                    border-top: 1px solid var(--vfx-border-color-strong);
+                }
+                .vfx-audio-description { margin-top: var(--vfx-spacing-xsmall); font-style: italic; }
+                .vfx-key-elements { margin-top: var(--vfx-spacing-xsmall); }
+                .vfx-image-preview-large img { max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: var(--vfx-border-radius-medium); margin: 0 auto; display: block; }
+
+
+                /* Button Icon Placement */
+                .vfx-button-icon-left > .vfx-icon { margin-right: var(--vfx-spacing-small); }
+                .vfx-button-icon-right > .vfx-icon { margin-left: var(--vfx-spacing-small); }
+
+
+                /* Animations (ensure these are defined) */
+                @keyframes vfxFadeIn { from { opacity: 0; } to { opacity: 1; } }
+                .vfx-animate-fade-in { animation: vfxFadeIn var(--vfx-transition-duration-slow) ease-out forwards; }
+
+                @keyframes vfxPopIn {
+                    0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+                    100% { opacity: 1; transform: scale(1) translateY(0); }
+                }
+                .vfx-animate-pop-in { animation: vfxPopIn var(--vfx-transition-duration) ease-out forwards; }
+
+                @keyframes vfxSlideInRight {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                .vfx-animate-slide-in-right { animation: vfxSlideInRight var(--vfx-transition-duration) ease-out forwards; }
+
+                @keyframes vfxSlideOutRight {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+                .vfx-animate-slide-out-right { animation: vfxSlideOutRight var(--vfx-transition-duration) ease-out forwards; }
+
+                @keyframes vfxSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+                .vfx-animate-spin { animation: vfxSpin 1s linear infinite; }
+
+                /* Remove remaining Tailwind-like utility classes if they are fully replaced by vfx-* system */
+                /* e.g. .mr-2\\.5 is replaced by .vfx-button-icon-left > .vfx-icon margin or specific component styles */
+                /* Any remaining utilities should be reviewed and have a vfx-utility-* prefix or be removed. */
+
+                /* Styles for classes added in the last JS updates */
+                .vfx-image-preview-item {
+                    display: flex;
+                    align-items: center;
+                    padding: var(--vfx-spacing-small);
+                    background-color: var(--vfx-background-elevated); /* Or vfx-background-card-nested */
+                    border-radius: var(--vfx-border-radius-medium);
+                    border: 1px solid var(--vfx-border-color-soft);
+                    margin-bottom: var(--vfx-spacing-medium); /* Space it from the input area below */
+                }
+                .vfx-image-preview-thumbnail {
+                    width: 48px; /* Approx w-12 h-12 */
+                    height: 48px;
+                    object-fit: cover;
+                    border-radius: var(--vfx-border-radius-small);
+                    margin-right: var(--vfx-spacing-medium);
+                }
+                .vfx-image-preview-info {
+                    flex-grow: 1;
+                    font-size: var(--vfx-font-size-small); /* For the "MB Max" text */
+                }
+                .vfx-text-truncate {
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+                .vfx-image-preview-clear-btn {
+                    margin-left: var(--vfx-spacing-small);
+                }
+
+                .vfx-welcome-icon { /* Specific styling for the large icon on welcome screen */
+                    margin-bottom: var(--vfx-spacing-large);
+                    /* font-size: var(--vfx-icon-xlarge) handled by class, color by vfx-icon-accent */
+                }
+                .vfx-icon-cta-arrow { /* For inspiration card "Use Theme ->" */
+                    transition: transform var(--vfx-transition-duration);
+                    display: inline-block; /* Allows transform */
+                }
+                .vfx-inspiration-card:hover .vfx-icon-cta-arrow {
+                    transform: translateX(3px);
+                }
+
+                .vfx-prompt-items-layout { /* Already defined as display:flex, flex-direction:column; gap: var(--vfx-spacing-medium); */
+                    /* No additional styles needed if this is sufficient */
+                }
+                .vfx-footer-select-group { /* Wrapper for select elements in footer, part of a grid */
+                    /* Grid properties are on vfx-footer-grid. This class is for potential specific styling if needed */
+                }
+                .vfx-footer-placeholder { /* Used for grid alignment, likely needs no visual style */
+                    display: none; /* Typically hidden unless in certain layouts */
+                }
+                @media (min-width: 1024px) { /* lg breakpoint from original Tailwind */
+                    .lg\\:block { display: block; } /* For footer-sceneext-placeholder */
+                     #footer-sceneext-placeholder.lg\\:col-span-2 { grid-column: span 2 / span 2; }
+                }
+
+
+            `);
+            // Font imports (should be fine as they are global)
+            GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Google+Sans+Text:wght@400;500;700&family=Google+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap');");
+            GM_addStyle("@import url('https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Outlined|Material+Icons+Round|Material+Icons+Sharp|Material+Icons+Two+Tone');");
+            GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');");
+            GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');");
+            
+            // Additional fixes for text color and alignment - MOSTLY REMOVED/COMMENTED
+            GM_addStyle(`
+                /*
+                    The following rules were previously !important overrides.
+                    They are now commented out or removed as the vfx-* system should handle them.
+                    If specific issues arise due to host page styles, targeted, non-!important
+                    overrides might be necessary, but the goal is to rely on the vfx-* system's specificity.
+                */
+
+                /* Input and Textarea text color is handled by .vfx-input, .vfx-textarea color properties */
+                /*
+                .vfx-floating-window input,
+                .vfx-floating-window textarea,
+                .vfx-floating-window select {
+                    color: #ffffff !important;
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                }
+                */
+
+                /* Placeholder color is handled by .vfx-input::placeholder, .vfx-textarea::placeholder */
+                /*
+                .vfx-floating-window input::placeholder,
+                .vfx-floating-window textarea::placeholder {
+                    color: rgba(255, 255, 255, 0.6) !important;
+                }
+                */
+
+                /* Blur and filter effects are not part of the new design. Pointer events are handled by base styles. */
+                /*
+                .vfx-floating-window {
+                    backdrop-filter: none !important;
+                    filter: none !important;
+                    pointer-events: auto !important;
+                }
+                */
+
+                /* Pointer events for interactive elements should be default 'auto' or handled by vfx-button[disabled] */
+                /*
+                .vfx-floating-window button,
+                .vfx-floating-window input,
+                .vfx-floating-window textarea,
+                .vfx-floating-window select,
+                .vfx-floating-window a {
+                    pointer-events: auto !important;
+                    cursor: pointer !important;
+                }
+                */
+
+                /* Icon sizes are handled by vfx-icon-small, vfx-icon-medium, vfx-icon-large */
+                /*
+                .vfx-floating-window .w-12 { width: 3rem !important; height: 3rem !important; }
+                .vfx-floating-window .h-12 { height: 3rem !important; }
+                */
+
+                /* Flexbox utilities are largely replaced by component-specific flex rules or general layout classes like vfx-form-grid */
+                /*
+                .vfx-floating-window .flex { display: flex !important; }
+                .vfx-floating-window .items-center { align-items: center !important; }
+                .vfx-floating-window .justify-center { justify-content: center !important; }
+                */
+
+                /* Button text color is handled by .vfx-button and its variants */
+                /*
+                .vfx-floating-window button {
+                    color: inherit !important;
+                }
+                */
+
+                /* Select option styling is handled by .vfx-select option */
+                /*
+                .vfx-floating-window select option {
+                    background-color: #1f2937 !important;
+                    color: #ffffff !important;
+                }
+                */
+
+                /* Global pointer-events and filter none is too broad and can have unintended side effects. */
+                /*
+                .vfx-floating-window * {
+                    filter: none !important;
+                    backdrop-filter: none !important;
+                    pointer-events: auto !important;
+                }
+                */
+
+                /* .vfx-window-content is not a defined class, pointer events handled by specific child elements */
+                /*
+                .vfx-floating-window .vfx-window-content {
+                    pointer-events: auto !important;
+                }
+                */
+
+                /* Button hover opacity is handled by .vfx-button:hover definitions */
+                /*
+                .vfx-floating-window button:hover {
+                    opacity: 0.8 !important;
+                }
+                */
+
+                /* Modal backdrop pointer events are handled by .vfx-modal-backdrop */
+                /*
+                .vfx-floating-window #vfx-general-modal-container {
+                    background: none !important;
+                    backdrop-filter: none !important;
+                    pointer-events: none !important;
+                }
+                .vfx-floating-window #vfx-general-modal-container > * {
+                    pointer-events: auto !important;
+                }
+                */
+
+                /* Audio toggle display and alignment are handled by .vfx-audio-toggle-container and its flex properties */
+                /*
+                .vfx-floating-window #footer-audio-toggle {
+                    display: flex !important;
+                    align-items: center !important;
+                    visibility: visible !important;
+                }
+                */
+
+                /* .vfx-toggle-switch (formerly #vfx-enable-audio-toggle) is styled by its own vfx-* classes */
+                /*
+                .vfx-floating-window #vfx-enable-audio-toggle {
+                    display: inline-flex !important;
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    background-color: #4B5563 !important;
+                    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                    width: 44px !important;
+                    height: 24px !important;
+                    border-radius: 12px !important;
+                    position: relative !important;
+                    transition: background-color 0.2s ease !important;
+                }
+                */
+            `);
+
+            // Load saved window state
+            windowState = loadWindowState();
+            loadPromptHistory(); // Load prompt history
+
+            createOverlayUI();
+            if (!overlayContainer) { console.error('[VideoFX Artisan] CRITICAL: overlayContainer not created.'); }
+            createToggleButton(); // Creates the button to show/hide the overlay
+            if (!toggleButton) { console.error('[VideoFX Artisan] CRITICAL: toggleButton not created.'); }
+            attachCoreEventListeners();
+
+            // Add window resize listener for responsive behavior
+            addTrackedEventListener(window, 'resize', debouncedWindowResize);
+
+            // Add beforeunload listener to save state
+            addTrackedEventListener(window, 'beforeunload', saveWindowState);
+
+            renderApp(); // Initial render
+            // Adjust initial display based on loaded state
+            if (overlayContainer) {
+                if (windowState.isVisible) {
+                    overlayContainer.style.display = 'flex'; // Or 'block' depending on its default display type
+                } else {
+                    overlayContainer.style.display = 'none';
+                }
+            }
+            // Ensure toggleButton is visible if it exists
+            if (toggleButton) {
+                toggleButton.style.display = 'block'; // Or its appropriate display type
+            }
+            if (generalModalContainer) generalModalContainer.style.display = 'none';
+        } catch (error) {
+            console.error('[VideoFX Artisan] CRITICAL ERROR during init:', error.message, error.stack);
+            alert('VideoFX Artisan Helper failed to initialize. See console for details.');
+        }
      }
     // --- END: Main Initialization Function ---
 
