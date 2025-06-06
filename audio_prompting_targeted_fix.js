@@ -2896,13 +2896,14 @@ Output ONLY a valid JSON array, where each object in the array has the following
 
  // --- START: Main Initialization Function ---
     function init() {
-        console.log(`${OVERLAY_TITLE} Helper Script v${SCRIPT_VERSION} initializing...`);
         try {
+            console.log(`${OVERLAY_TITLE} Helper Script v${SCRIPT_VERSION} initializing...`);
             // --- CSS Styles (GM_addStyle) ---
             // The main CSS block with vfx-* classes has been added earlier.
             // This section is for Tailwind-like utilities and specific overrides if needed.
             // Most of the old Tailwind classes should be removed or replaced by vfx-* classes.
-            GM_addStyle(`
+            try {
+                GM_addStyle(`
                 /* Tailwind-like utility classes (subset) - RETAINED FOR NOW, but should be phased out */
                 /* Most of these should be covered by specific vfx-* component styles or default browser behaviors. */
                 /* #${OVERLAY_ID} .fixed { position: fixed; } */ /* Covered by #${OVERLAY_ID} styling */
@@ -3162,12 +3163,35 @@ Output ONLY a valid JSON array, where each object in the array has the following
 
 
             `);
-            // Font imports (should be fine as they are global)
-            GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Google+Sans+Text:wght@400;500;700&family=Google+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap');");
-            GM_addStyle("@import url('https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Outlined|Material+Icons+Round|Material+Icons+Sharp|Material+Icons+Two+Tone');");
-            GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');");
-            GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');");
+            } catch (e) {
+                console.error('[VideoFX Artisan] Error adding main utility CSS styles:', e.message, e.stack);
+            }
+
+            try {
+                GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Google+Sans+Text:wght@400;500;700&family=Google+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap');");
+            } catch (e) {
+                console.error('[VideoFX Artisan] Error adding Space Grotesk & Google Sans fonts:', e.message, e.stack);
+            }
+
+            try {
+                GM_addStyle("@import url('https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Outlined|Material+Icons+Round|Material+Icons+Sharp|Material+Icons+Two+Tone');");
+            } catch (e) {
+                console.error('[VideoFX Artisan] Error adding Material Icons:', e.message, e.stack);
+            }
+
+            try {
+                GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');");
+            } catch (e) {
+                console.error('[VideoFX Artisan] Error adding Material Symbols Outlined:', e.message, e.stack);
+            }
+
+            try {
+                GM_addStyle("@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');");
+            } catch (e) {
+                console.error('[VideoFX Artisan] Error adding Material Symbols Rounded:', e.message, e.stack);
+            }
             
+            try {
             // Additional fixes for text color and alignment - MOSTLY REMOVED/COMMENTED
             GM_addStyle(`
                 /*
@@ -3305,6 +3329,9 @@ Output ONLY a valid JSON array, where each object in the array has the following
                 }
                 */
             `);
+            } catch (e) {
+                console.error('[VideoFX Artisan] Error adding compatibility/override CSS styles:', e.message, e.stack);
+            }
 
             // Load saved window state
             windowState = loadWindowState();
