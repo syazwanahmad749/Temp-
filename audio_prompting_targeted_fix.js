@@ -1342,11 +1342,15 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         if (!generalModalContainer) return;
         if (!state.activeModal) {
             generalModalContainer.style.display = 'none';
+            generalModalContainer.classList.remove('animate-slideDown');
             generalModalContainer.innerHTML = '';
             return;
         }
 
+        generalModalContainer.classList.remove('animate-slideDown');
+        void generalModalContainer.offsetWidth;
         generalModalContainer.style.display = 'flex';
+        generalModalContainer.classList.add('animate-slideDown');
         let modalContentHTML = '';
         const { type, data, isLoading, error, result } = state.activeModal;
 
@@ -2174,8 +2178,16 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         toggleButton.addEventListener('click', () => {
             if (overlayContainer) {
                 const isHidden = overlayContainer.style.display === 'none';
-                overlayContainer.style.display = isHidden ? 'flex' : 'none';
-                
+                if (isHidden) {
+                    overlayContainer.classList.remove('animate-slideDown');
+                    void overlayContainer.offsetWidth;
+                    overlayContainer.style.display = 'flex';
+                    overlayContainer.classList.add('animate-slideDown');
+                } else {
+                    overlayContainer.style.display = 'none';
+                    overlayContainer.classList.remove('animate-slideDown');
+                }
+
                 // Update button appearance
                 if (isHidden) {
                     toggleButton.style.background = 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
@@ -2377,6 +2389,7 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
         // Close overlay button
         overlayContainer.querySelector('#vfx-artisan-close-overlay')?.addEventListener('click', () => {
             overlayContainer.style.display = 'none';
+            overlayContainer.classList.remove('animate-slideDown');
             windowState.isVisible = false;
             saveWindowState();
         });
@@ -2693,6 +2706,19 @@ Output ONLY a single, valid JSON object with the following structure: {"concept"
             #${OVERLAY_ID} .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
             #${OVERLAY_ID} @keyframes popIn { 0% { opacity: 0; transform: scale(0.95) translateY(10px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
             #${OVERLAY_ID} .animate-popIn { animation: popIn 0.3s ease-out forwards; }
+            #${OVERLAY_ID} @keyframes slideDown { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+            #${OVERLAY_ID} .animate-slideDown { animation: slideDown 0.3s ease-out forwards; }
+            #${OVERLAY_ID} @keyframes bounceIn { 0% { opacity: 0; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1.05); } 100% { transform: scale(1); } }
+            #${OVERLAY_ID} .animate-bounceIn { animation: bounceIn 0.4s ease-out forwards; }
+            @media (prefers-reduced-motion: reduce) {
+                #${OVERLAY_ID} .animate-slideDown,
+                #${OVERLAY_ID} .animate-bounceIn,
+                #${OVERLAY_ID} .animate-fadeIn,
+                #${OVERLAY_ID} .animate-popIn,
+                #${OVERLAY_ID} .animate-spin {
+                    animation: none !important;
+                }
+            }
 
             #${OVERLAY_ID} .vpa-text-main { color: hsl(200, 12%, 95.1%); }
             #${OVERLAY_ID} .vpa-text-subdued { color: hsla(0, 0%, 100%, 0.75); }
